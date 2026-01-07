@@ -66,7 +66,7 @@ impl Database {
         self.conn.execute(
             "INSERT OR REPLACE INTO search_index (path, name, extension, file_size, modified_time, last_indexed)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            [path, name, extension, file_size, modified_time, last_indexed],
+            rusqlite::params![path, name, extension, file_size, modified_time, last_indexed],
         )?;
         Ok(())
     }
@@ -103,31 +103,35 @@ impl Database {
         limit: usize,
     ) -> Result<Vec<(String, String, Option<String>, Option<i64>, String)>> {
         let mut sql = "SELECT path, name, extension, file_size, modified_time FROM search_index WHERE name LIKE ?1".to_string();
-        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&format!("%{}%", query)];
+        let query_pattern = format!("%{}%", query);
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(query_pattern)];
 
         if let Some(exts) = extensions {
             if !exts.is_empty() {
                 let placeholders: Vec<String> = exts.iter().map(|_| "?".to_string()).collect();
                 sql.push_str(&format!(" AND extension IN ({})", placeholders.join(", ")));
-                exts.iter().for_each(|ext| params.push(ext));
+                for ext in exts {
+                    params.push(Box::new(ext));
+                }
             }
         }
 
         if let Some(min) = min_size {
             sql.push_str(" AND file_size >= ?");
-            params.push(&min);
+            params.push(Box::new(min));
         }
 
         if let Some(max) = max_size {
             sql.push_str(" AND file_size <= ?");
-            params.push(&max);
+            params.push(Box::new(max));
         }
 
         sql.push_str(" ORDER BY name ASC LIMIT ?");
-        params.push(&(limit as i64));
+        params.push(Box::new(limit as i64));
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let mut rows = stmt.query(params.as_slice())?;
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let mut rows = stmt.query(params_refs.as_slice())?;
 
         let mut results = Vec::new();
         while let Some(row) = rows.next()? {

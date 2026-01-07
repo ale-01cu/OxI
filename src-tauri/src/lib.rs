@@ -7,10 +7,10 @@ use indexer::Indexer;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tokio::sync::Mutex as AsyncMutex;
+use tauri::{AppHandle, Emitter};
 use tracing::{error, info};
 use tracing_subscriber;
-use types::{IndexingProgress, IndexingStatus, SearchConfig, SearchFilters, SearchResults};
+use types::{IndexingStatus, SearchConfig, SearchFilters, SearchResults};
 
 static DB_PATH: &str = "oxi-search.db";
 
@@ -92,14 +92,17 @@ async fn reindex_path(
 
     info!("Starting reindex of {:?} paths", paths_to_index);
 
-    let app = app_handle.clone();
+    let app = Arc::new(app_handle);
 
     tokio::spawn(async move {
+        let app_clone = app.clone();
+        let progress_callback = Arc::new(move |progress: types::IndexingProgress| {
+            info!("Indexing progress: {:?}", progress);
+            let _ = app_clone.emit("indexing-progress", progress);
+        });
+
         let result = indexer
-            .index_multiple_paths(&paths_to_index, &patterns, |progress| {
-                info!("Indexing progress: {:?}", progress);
-                let _ = app.emit("indexing-progress", progress);
-            })
+            .index_multiple_paths(paths_to_index, patterns, progress_callback)
             .await;
 
         match result {
@@ -213,6 +216,7 @@ pub fn run() {
     info!("Database initialized");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .manage(db)
         .invoke_handler(tauri::generate_handler![
