@@ -1,0 +1,1038 @@
+>>> package.json
+{
+"name": "oxi-client",
+"private": true,
+"version": "0.1.0",
+"type": "module",
+"scripts": {
+"dev": "vite",
+"build": "tsc && vite build",
+"preview": "vite preview",
+"tauri": "tauri"
+},
+"dependencies": {
+"@tauri-apps/api": "^2",
+"@tauri-apps/plugin-opener": "^2",
+"lucide-react": "^0.562.0",
+"react": "^19.1.0",
+"react-dom": "^19.1.0"
+},
+"devDependencies": {
+"@tauri-apps/cli": "^2",
+"@types/react": "^19.1.8",
+"@types/react-dom": "^19.1.6",
+"@vitejs/plugin-react": "^4.6.0",
+"autoprefixer": "^10.4.23",
+"postcss": "^8.5.6",
+"tailwindcss": "^4.1.18",
+"typescript": "~5.8.3",
+"vite": "^7.0.4"
+}
+}
+>>> postcss.config.js
+export default {
+plugins: {
+tailwindcss: {},
+autoprefixer: {},
+},
+}
+>>> src\App.tsx
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { Search, HardDrive, Settings, FileText } from "lucide-react";
+interface SearchResult {
+path: string;
+name: string;
+extension: string | null;
+file_size: number | null;
+modified_time: string;
+score: number;
+}
+interface SearchResults {
+query: string;
+results: SearchResult[];
+total: number;
+page: number;
+limit: number;
+}
+interface IndexingProgress {
+current_path: string;
+files_processed: number;
+total_files: number | null;
+status: string;
+}
+function App() {
+const [query, setQuery] = useState("");
+const [results, setResults] = useState<SearchResult[]>([]);
+const [isSearching, setIsSearching] = useState(false);
+const [isIndexing, setIsIndexing] = useState(false);
+const [indexingProgress, setIndexingProgress] = useState<IndexingProgress | null>(null);
+const [totalFiles, setTotalFiles] = useState(0);
+useEffect(() => {
+loadIndexingStatus();
+const unlistenProgress = listen<IndexingProgress>("indexing-progress", (event) => {
+setIndexingProgress(event.payload);
+setIsIndexing(true);
+});
+const unlistenCompleted = listen<number>("indexing-completed", (event) => {
+setTotalFiles(event.payload);
+setIsIndexing(false);
+setIndexingProgress(null);
+loadIndexingStatus();
+});
+return () => {
+unlistenProgress.then(f => f());
+unlistenCompleted.then(f => f());
+};
+}, []);
+const loadIndexingStatus = async () => {
+try {
+const status = await invoke<any>("get_indexing_status");
+setTotalFiles(status.total_files || 0);
+} catch (error) {
+console.error("Failed to load indexing status:", error);
+}
+};
+const handleSearch = async (searchQuery: string) => {
+if (!searchQuery.trim()) {
+setResults([]);
+return;
+}
+setIsSearching(true);
+try {
+const response: SearchResults = await invoke("search_files", {
+query: searchQuery,
+filters: {
+extensions: null,
+minSize: null,
+maxSize: null,
+minDate: null,
+maxDate: null,
+},
+page: 0,
+limit: 50,
+});
+setResults(response.results);
+} catch (error) {
+console.error("Search failed:", error);
+} finally {
+setIsSearching(false);
+}
+};
+const startIndexing = async () => {
+try {
+await invoke("reindex_path", {
+path: null,
+excludePatterns: [],
+});
+} catch (error) {
+console.error("Failed to start indexing:", error);
+}
+};
+const openLocation = async (path: string) => {
+try {
+await invoke("open_location", { path });
+} catch (error) {
+console.error("Failed to open location:", error);
+}
+};
+const formatFileSize = (bytes: number | null) => {
+if (!bytes) return "-";
+const units = ["B", "KB", "MB", "GB"];
+let size = bytes;
+let unitIndex = 0;
+while (size >= 1024 && unitIndex < units.length - 1) {
+size /= 1024;
+unitIndex++;
+}
+return `${size.toFixed(1)} ${units[unitIndex]}`;
+};
+const formatDate = (dateStr: string) => {
+try {
+return new Date(dateStr).toLocaleDateString();
+} catch {
+return "-";
+}
+};
+return (
+<div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+<nav className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div className="flex justify-between h-16 items-center">
+<div className="flex items-center gap-2">
+<Search className="w-8 h-8 text-blue-600" />
+<span className="text-xl font-bold">OxI Search</span>
+</div>
+<div className="flex items-center gap-4">
+<div className="text-sm text-gray-600 dark:text-gray-400">
+{totalFiles} archivos indexados
+</div>
+<button
+onClick={startIndexing}
+disabled={isIndexing}
+className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+>
+<HardDrive className="w-4 h-4" />
+{isIndexing ? "Indexando..." : "Reindexar"}
+</button>
+<button className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
+<Settings className="w-6 h-6" />
+</button>
+</div>
+</div>
+</div>
+</nav>
+{isIndexing && indexingProgress && (
+<div className="border-b border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+<div className="flex items-center gap-3">
+<div className="animate-spin">
+<HardDrive className="w-5 h-5 text-blue-600" />
+</div>
+<div className="flex-1">
+<div className="text-sm font-medium text-blue-900 dark:text-blue-100">
+Indexando: {indexingProgress.files_processed} archivos
+</div>
+<div className="text-xs text-blue-700 dark:text-blue-300 truncate max-w-2xl">
+{indexingProgress.current_path}
+</div>
+</div>
+</div>
+</div>
+</div>
+)}
+<main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div className="mb-6">
+<div className="relative">
+<Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+<input
+type="text"
+value={query}
+onChange={(e) => {
+setQuery(e.target.value);
+handleSearch(e.target.value);
+}}
+placeholder="Buscar archivos..."
+className="w-full pl-12 pr-4 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+autoFocus
+/>
+</div>
+</div>
+{isSearching && (
+<div className="text-center py-12">
+<div className="animate-spin inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+<p className="mt-4 text-gray-600 dark:text-gray-400">Buscando...</p>
+</div>
+)}
+{!isSearching && results.length > 0 && (
+<div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+<div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+<h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+{results.length} resultados encontrados
+</h2>
+</div>
+<ul className="divide-y divide-gray-200 dark:divide-gray-700">
+{results.map((result, index) => (
+<li
+key={index}
+className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+>
+<div className="flex items-start gap-3">
+<FileText className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+<div className="flex-1 min-w-0">
+<div className="flex items-center gap-2">
+<h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+{result.name}
+</h3>
+<span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+{result.extension}
+</span>
+</div>
+<div className="text-xs text-gray-600 dark:text-gray-400 truncate mt-1">
+{result.path}
+</div>
+<div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+<span>{formatFileSize(result.file_size)}</span>
+<span>{formatDate(result.modified_time)}</span>
+<button
+onClick={() => openLocation(result.path)}
+className="text-blue-600 hover:text-blue-700 transition-colors"
+>
+Abrir ubicación
+</button>
+</div>
+</div>
+</div>
+</li>
+))}
+</ul>
+</div>
+)}
+{!isSearching && query && results.length === 0 && (
+<div className="text-center py-12">
+<FileText className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+<h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+No se encontraron resultados
+</h3>
+<p className="text-sm text-gray-600 dark:text-gray-400">
+Intenta con otra búsqueda
+</p>
+</div>
+)}
+</main>
+</div>
+);
+}
+export default App;
+>>> src\main.tsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./index.css";
+import App from "./App";
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+<React.StrictMode>
+<App />
+</React.StrictMode>,
+);
+>>> src\vite-env.d.ts
+/// <reference types="vite/client" />
+>>> src-tauri\build.rs
+fn main() {
+tauri_build::build()
+}
+>>> src-tauri\capabilities\default.json
+{
+"$schema": "../gen/schemas/desktop-schema.json",
+"identifier": "default",
+"description": "Capability for the main window",
+"windows": ["main"],
+"permissions": [
+"core:default",
+"opener:default"
+]
+}
+>>> src-tauri\src\db.rs
+use rusqlite::{Connection, Result};
+use std::path::PathBuf;
+use tracing::{error, info};
+pub struct Database {
+conn: Connection,
+}
+impl Database {
+pub fn new(db_path: PathBuf) -> Result<Self> {
+let conn = Connection::open(&db_path)?;
+let db = Self { conn };
+db.init_schema()?;
+Ok(db)
+}
+fn init_schema(&self) -> Result<()> {
+info!("Initializing database schema");
+self.conn.execute(
+"CREATE TABLE IF NOT EXISTS search_index (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+path TEXT UNIQUE NOT NULL,
+name TEXT NOT NULL,
+extension TEXT,
+file_size INTEGER,
+modified_time TEXT NOT NULL,
+last_indexed TEXT NOT NULL
+)",
+[],
+)?;
+self.conn.execute(
+"CREATE INDEX IF NOT EXISTS idx_search_name ON search_index(name)",
+[],
+)?;
+self.conn.execute(
+"CREATE INDEX IF NOT EXISTS idx_search_extension ON search_index(extension)",
+[],
+)?;
+self.conn.execute(
+"CREATE INDEX IF NOT EXISTS idx_search_size ON search_index(file_size)",
+[],
+)?;
+self.conn.execute(
+"CREATE INDEX IF NOT EXISTS idx_search_modified ON search_index(modified_time)",
+[],
+)?;
+info!("Database schema initialized");
+Ok(())
+}
+pub fn upsert_file(
+&self,
+path: &str,
+name: &str,
+extension: Option<&str>,
+file_size: Option<i64>,
+modified_time: &str,
+last_indexed: &str,
+) -> Result<()> {
+self.conn.execute(
+"INSERT OR REPLACE INTO search_index (path, name, extension, file_size, modified_time, last_indexed)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+[path, name, extension, file_size, modified_time, last_indexed],
+)?;
+Ok(())
+}
+pub fn delete_file(&self, path: &str) -> Result<()> {
+self.conn
+.execute("DELETE FROM search_index WHERE path = ?1", [path])?;
+Ok(())
+}
+pub fn get_file_count(&self) -> Result<usize> {
+let count: i64 = self
+.conn
+.query_row("SELECT COUNT(*) FROM search_index", [], |row| row.get(0))?;
+Ok(count as usize)
+}
+pub fn get_database_size(&self) -> Result<u64> {
+let size: i64 = self
+.conn
+.query_row("PRAGMA page_count", [], |row| row.get(0))?;
+let page_size: i64 = self
+.conn
+.query_row("PRAGMA page_size", [], |row| row.get(0))?;
+Ok((size * page_size) as u64)
+}
+pub fn search_files(
+&self,
+query: &str,
+extensions: Option<Vec<String>>,
+min_size: Option<i64>,
+max_size: Option<i64>,
+limit: usize,
+) -> Result<Vec<(String, String, Option<String>, Option<i64>, String)>> {
+let mut sql = "SELECT path, name, extension, file_size, modified_time FROM search_index WHERE name LIKE ?1".to_string();
+let mut params: Vec<&dyn rusqlite::ToSql> = vec![&format!("%{}%", query)];
+if let Some(exts) = extensions {
+if !exts.is_empty() {
+let placeholders: Vec<String> = exts.iter().map(|_| "?".to_string()).collect();
+sql.push_str(&format!(" AND extension IN ({})", placeholders.join(", ")));
+exts.iter().for_each(|ext| params.push(ext));
+}
+}
+if let Some(min) = min_size {
+sql.push_str(" AND file_size >= ?");
+params.push(&min);
+}
+if let Some(max) = max_size {
+sql.push_str(" AND file_size <= ?");
+params.push(&max);
+}
+sql.push_str(" ORDER BY name ASC LIMIT ?");
+params.push(&(limit as i64));
+let mut stmt = self.conn.prepare(&sql)?;
+let mut rows = stmt.query(params.as_slice())?;
+let mut results = Vec::new();
+while let Some(row) = rows.next()? {
+results.push((
+row.get(0)?,
+row.get(1)?,
+row.get(2)?,
+row.get(3)?,
+row.get(4)?,
+));
+}
+Ok(results)
+}
+pub fn get_last_indexed_time(&self) -> Result<Option<String>> {
+let result: Option<String> = self
+.conn
+.query_row("SELECT MAX(last_indexed) FROM search_index", [], |row| {
+row.get(0)
+})
+.ok();
+Ok(result)
+}
+pub fn delete_stale_entries(&self, older_than_hours: i64) -> Result<usize> {
+let cutoff = chrono::Utc::now() - chrono::Duration::hours(older_than_hours);
+let cutoff_str = cutoff.to_rfc3339();
+let result = self.conn.execute(
+"DELETE FROM search_index WHERE last_indexed < ?1",
+[&cutoff_str],
+)?;
+Ok(result as usize)
+}
+pub fn vacuum(&self) -> Result<()> {
+self.conn.execute("VACUUM", [])?;
+Ok(())
+}
+pub fn get_connection(&self) -> &Connection {
+&self.conn
+}
+}
+>>> src-tauri\src\indexer.rs
+use crate::db::Database;
+use crate::types::{FileEntry, IndexingProgress};
+use chrono::Utc;
+use ignore::WalkBuilder;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Instant;
+use tokio::sync::Mutex;
+use tracing::{debug, info, warn};
+pub struct Indexer {
+db: Arc<Mutex<Database>>,
+}
+impl Indexer {
+pub fn new(db: Arc<Mutex<Database>>) -> Self {
+Self { db }
+}
+pub async fn index_path(
+&self,
+path: &str,
+exclude_patterns: &[String],
+progress_callback: impl Fn(IndexingProgress),
+) -> Result<usize, Box<dyn std::error::Error>> {
+info!("Starting indexing of path: {}", path);
+let start = Instant::now();
+let path_obj = Path::new(path);
+if !path_obj.exists() {
+return Err(format!("Path does not exist: {}", path).into());
+}
+let mut walk = WalkBuilder::new(path_obj);
+walk.hidden(true);
+for pattern in exclude_patterns {
+walk.filter_entry(|entry| {
+let path_str = entry.path().to_string_lossy();
+!path_str.contains(pattern)
+});
+}
+let walker = walk.build_parallel();
+let count = Arc::new(Mutex::new(0usize));
+walker.run(|| {
+let db = Arc::clone(&self.db);
+let count = Arc::clone(&count);
+Box::new(move |result| {
+if let Ok(entry) = result {
+if entry.file_type().is_file() {
+if let Ok(metadata) = entry.metadata() {
+if let Some(path_str) = entry.path().to_str() {
+if let Some(name) = entry.file_name().to_str() {
+let extension = entry
+.path()
+.extension()
+.and_then(|e| e.to_str())
+.map(|s| format!(".{}", s));
+let modified_time: DateTime<Utc> = metadata
+.modified()
+.ok()
+.and_then(|t| t.into())
+.unwrap_or_else(Utc::now);
+let file_size = Some(metadata.len() as i64);
+let modified_time_str = modified_time.to_rfc3339();
+let last_indexed_str = Utc::now().to_rfc3339();
+let db_clone = Arc::clone(&db);
+if let Ok(db) = db_clone.try_lock() {
+if let Err(e) = db.upsert_file(
+path_str,
+name,
+extension.as_deref(),
+file_size,
+&modified_time_str,
+&last_indexed_str,
+) {
+warn!("Failed to upsert file {}: {}", path_str, e);
+} else {
+let mut cnt = count.lock().unwrap();
+*cnt += 1;
+progress_callback(IndexingProgress {
+current_path: path_str.to_string(),
+files_processed: *cnt,
+total_files: None,
+status: "indexing".to_string(),
+});
+}
+}
+}
+}
+}
+}
+}
+ignore::WalkState::Continue
+})
+});
+let elapsed = start.elapsed();
+let final_count = *count.lock().unwrap();
+info!("Indexing completed: {} files in {:?}", final_count, elapsed);
+Ok(final_count)
+}
+pub async fn index_multiple_paths(
+&self,
+paths: &[String],
+exclude_patterns: &[String],
+progress_callback: impl Fn(IndexingProgress),
+) -> Result<usize, Box<dyn std::error::Error>> {
+let mut total_count = 0;
+for (idx, path) in paths.iter().enumerate() {
+info!("Indexing path {}/{}: {}", idx + 1, paths.len(), path);
+let count = self
+.index_path(path, exclude_patterns, &progress_callback)
+.await?;
+total_count += count;
+}
+Ok(total_count)
+}
+pub fn get_default_indexing_paths() -> Vec<String> {
+let mut paths = Vec::new();
+if let Ok(home) = std::env::var("HOME") {
+paths.push(home.clone());
+paths.push(format!("{}/Documents", home));
+paths.push(format!("{}/Downloads", home));
+paths.push(format!("{}/Pictures", home));
+} else if let Ok(home) = std::env::var("USERPROFILE") {
+paths.push(home.clone());
+paths.push(format!("{}\\Documents", home));
+paths.push(format!("{}\\Downloads", home));
+paths.push(format!("{}\\Pictures", home));
+}
+paths
+}
+pub fn get_default_exclude_patterns() -> Vec<String> {
+vec![
+".git".to_string(),
+"node_modules".to_string(),
+"target".to_string(),
+".DS_Store".to_string(),
+"__pycache__".to_string(),
+".venv".to_string(),
+"venv".to_string(),
+]
+}
+}
+>>> src-tauri\src\lib.rs
+mod db;
+mod indexer;
+mod types;
+use db::Database;
+use indexer::Indexer;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
+use tokio::sync::Mutex as AsyncMutex;
+use tracing::{error, info};
+use tracing_subscriber;
+use types::{IndexingProgress, IndexingStatus, SearchConfig, SearchFilters, SearchResults};
+static DB_PATH: &str = "oxi-search.db";
+#[tauri::command]
+async fn search_files(
+query: String,
+filters: SearchFilters,
+page: usize,
+limit: usize,
+db: tauri::State<'_, Arc<Mutex<Database>>>,
+) -> Result<SearchResults, String> {
+if query.is_empty() {
+return Ok(SearchResults {
+query,
+results: Vec::new(),
+total: 0,
+page,
+limit,
+});
+}
+let db_guard = db.lock().map_err(|e| e.to_string())?;
+let results = db_guard
+.search_files(
+&query,
+filters.extensions,
+filters.min_size.map(|s| s as i64),
+filters.max_size.map(|s| s as i64),
+limit,
+)
+.map_err(|e| e.to_string())?;
+let total = results.len();
+let results: Vec<types::SearchResult> = results
+.into_iter()
+.map(
+|(path, name, extension, file_size, modified_time)| types::SearchResult {
+path,
+name,
+extension,
+file_size: file_size.map(|s| s as u64),
+modified_time,
+score: 1.0,
+},
+)
+.collect();
+Ok(SearchResults {
+query,
+results,
+total,
+page,
+limit,
+})
+}
+#[tauri::command]
+async fn reindex_path(
+path: Option<String>,
+exclude_patterns: Vec<String>,
+db: tauri::State<'_, Arc<Mutex<Database>>>,
+app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+let db_clone = Arc::clone(&db);
+let indexer = Indexer::new(db_clone);
+let paths_to_index = if let Some(p) = path {
+vec![p]
+} else {
+Indexer::get_default_indexing_paths()
+};
+let patterns = if exclude_patterns.is_empty() {
+Indexer::get_default_exclude_patterns()
+} else {
+exclude_patterns
+};
+info!("Starting reindex of {:?} paths", paths_to_index);
+let app = app_handle.clone();
+tokio::spawn(async move {
+let result = indexer
+.index_multiple_paths(&paths_to_index, &patterns, |progress| {
+info!("Indexing progress: {:?}", progress);
+let _ = app.emit("indexing-progress", progress);
+})
+.await;
+match result {
+Ok(count) => {
+info!("Indexing completed: {} files", count);
+let _ = app.emit("indexing-completed", count);
+}
+Err(e) => {
+error!("Indexing failed: {}", e);
+let _ = app.emit("indexing-error", e.to_string());
+}
+}
+});
+Ok("Indexing started".to_string())
+}
+#[tauri::command]
+async fn get_indexing_status(
+db: tauri::State<'_, Arc<Mutex<Database>>>,
+) -> Result<IndexingStatus, String> {
+let db_guard = db.lock().map_err(|e| e.to_string())?;
+let file_count = db_guard.get_file_count().map_err(|e| e.to_string())?;
+let database_size = db_guard.get_database_size().map_err(|e| e.to_string())?;
+let last_indexed = db_guard
+.get_last_indexed_time()
+.map_err(|e| e.to_string())?;
+Ok(IndexingStatus {
+is_indexing: false,
+last_indexed,
+total_files: file_count,
+database_size,
+})
+}
+#[tauri::command]
+async fn get_config() -> Result<SearchConfig, String> {
+Ok(SearchConfig::default())
+}
+#[tauri::command]
+async fn update_config(config: SearchConfig) -> Result<(), String> {
+info!("Config updated: {:?}", config);
+Ok(())
+}
+#[tauri::command]
+async fn open_location(path: String) -> Result<(), String> {
+use tauri_plugin_shell::ShellExt;
+#[cfg(target_os = "windows")]
+{
+std::process::Command::new("explorer")
+.args(["/select,", &path])
+.spawn()
+.map_err(|e| e.to_string())?;
+}
+#[cfg(target_os = "linux")]
+{
+if std::path::Path::new(&path).is_dir() {
+std::process::Command::new("xdg-open")
+.arg(&path)
+.spawn()
+.map_err(|e| e.to_string())?;
+} else {
+let parent = std::path::Path::new(&path)
+.parent()
+.map(|p| p.to_string_lossy().to_string())
+.unwrap_or_else(|| path.clone());
+std::process::Command::new("xdg-open")
+.arg(&parent)
+.spawn()
+.map_err(|e| e.to_string())?;
+}
+}
+#[cfg(target_os = "macos")]
+{
+std::process::Command::new("open")
+.args(["-R", &path])
+.spawn()
+.map_err(|e| e.to_string())?;
+}
+Ok(())
+}
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+tracing_subscriber::fmt()
+.with_env_filter(
+tracing_subscriber::EnvFilter::from_default_env()
+.add_directive(tracing::Level::INFO.into()),
+)
+.init();
+info!("OxI Search starting...");
+let db_path = PathBuf::from(DB_PATH);
+let db = match Database::new(db_path) {
+Ok(db) => Arc::new(Mutex::new(db)),
+Err(e) => {
+error!("Failed to initialize database: {}", e);
+panic!("Database initialization failed: {}", e);
+}
+};
+info!("Database initialized");
+tauri::Builder::default()
+.plugin(tauri_plugin_shell::init())
+.manage(db)
+.invoke_handler(tauri::generate_handler![
+search_files,
+reindex_path,
+get_indexing_status,
+get_config,
+update_config,
+open_location,
+])
+.run(tauri::generate_context!())
+.expect("error while running tauri application");
+}
+>>> src-tauri\src\main.rs
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+fn main() {
+oxi_client_lib::run()
+}
+>>> src-tauri\src\types.rs
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEntry {
+pub path: String,
+pub name: String,
+pub extension: Option<String>,
+pub file_size: Option<u64>,
+pub modified_time: DateTime<Utc>,
+pub is_dir: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResult {
+pub path: String,
+pub name: String,
+pub extension: Option<String>,
+pub file_size: Option<u64>,
+pub modified_time: String,
+pub score: f64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchFilters {
+pub extensions: Option<Vec<String>>,
+pub min_size: Option<u64>,
+pub max_size: Option<u64>,
+pub min_date: Option<String>,
+pub max_date: Option<String>,
+}
+impl Default for SearchFilters {
+fn default() -> Self {
+Self {
+extensions: None,
+min_size: None,
+max_size: None,
+min_date: None,
+max_date: None,
+}
+}
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResults {
+pub query: String,
+pub results: Vec<SearchResult>,
+pub total: usize,
+pub page: usize,
+pub limit: usize,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexingProgress {
+pub current_path: String,
+pub files_processed: usize,
+pub total_files: Option<usize>,
+pub status: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexingStatus {
+pub is_indexing: bool,
+pub last_indexed: Option<String>,
+pub total_files: usize,
+pub database_size: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchConfig {
+pub indexing_paths: Vec<String>,
+pub exclude_patterns: Vec<String>,
+pub max_results: usize,
+pub fuzzy_threshold: f64,
+pub cache_enabled: bool,
+pub cache_ttl_hours: u64,
+pub theme: String,
+}
+impl Default for SearchConfig {
+fn default() -> Self {
+Self {
+indexing_paths: vec![],
+exclude_patterns: vec![],
+max_results: 1000,
+fuzzy_threshold: 0.7,
+cache_enabled: true,
+cache_ttl_hours: 1,
+theme: "dark".to_string(),
+}
+}
+}
+>>> src-tauri\target\.rustc_info.json
+{"rustc_fingerprint":11332890469702497476,"outputs":{"17747080675513052775":{"success":true,"status":"","code":0,"stdout":"rustc 1.92.0 (ded5c06cf 2025-12-08)\nbinary: rustc\ncommit-hash: ded5c06cf21d2b93bffd5d884aa6e96934ee4234\ncommit-date: 2025-12-08\nhost: x86_64-pc-windows-msvc\nrelease: 1.92.0\nLLVM version: 21.1.3\n","stderr":""},"7971740275564407648":{"success":true,"status":"","code":0,"stdout":"___.exe\nlib___.rlib\n___.dll\n___.dll\n___.lib\n___.dll\nC:\\Users\\Ale z17\\.rustup\\toolchains\\stable-x86_64-pc-windows-msvc\npacked\n___\ndebug_assertions\npanic=\"unwind\"\nproc_macro\ntarget_abi=\"\"\ntarget_arch=\"x86_64\"\ntarget_endian=\"little\"\ntarget_env=\"msvc\"\ntarget_family=\"windows\"\ntarget_feature=\"cmpxchg16b\"\ntarget_feature=\"fxsr\"\ntarget_feature=\"sse\"\ntarget_feature=\"sse2\"\ntarget_feature=\"sse3\"\ntarget_has_atomic=\"128\"\ntarget_has_atomic=\"16\"\ntarget_has_atomic=\"32\"\ntarget_has_atomic=\"64\"\ntarget_has_atomic=\"8\"\ntarget_has_atomic=\"ptr\"\ntarget_os=\"windows\"\ntarget_pointer_width=\"64\"\ntarget_vendor=\"pc\"\nwindows\n","stderr":""}},"successes":{}}
+>>> src-tauri\target\debug\.fingerprint\cfg-if-4316c8dd3aae8aa0\lib-cfg_if.json
+{"rustc":7895727629726570510,"features":"[]","declared_features":"[\"core\", \"rustc-dep-of-std\"]","target":13840298032947503755,"profile":15657897354478470176,"path":9736109571522915939,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\cfg-if-4316c8dd3aae8aa0\\dep-lib-cfg_if","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\fnv-5107d17ea291695c\lib-fnv.json
+{"rustc":7895727629726570510,"features":"[\"default\", \"std\"]","declared_features":"[\"default\", \"std\"]","target":10248144769085601448,"profile":15657897354478470176,"path":15981517168281650691,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\fnv-5107d17ea291695c\\dep-lib-fnv","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\getrandom-9f4f273bc630c1ac\lib-getrandom.json
+{"rustc":7895727629726570510,"features":"[\"std\"]","declared_features":"[\"compiler_builtins\", \"core\", \"custom\", \"js\", \"js-sys\", \"linux_disable_fallback\", \"rdrand\", \"rustc-dep-of-std\", \"std\", \"test-in-browser\", \"wasm-bindgen\"]","target":16244099637825074703,"profile":2225463790103693989,"path":402521315138946732,"deps":[[7667230146095136825,"cfg_if",false,2610416403448747245]],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\getrandom-9f4f273bc630c1ac\\dep-lib-getrandom","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\itoa-b6569403e6bb5399\lib-itoa.json
+{"rustc":7895727629726570510,"features":"[]","declared_features":"[\"no-panic\"]","target":18426369533666673425,"profile":15657897354478470176,"path":423365565487531874,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\itoa-b6569403e6bb5399\\dep-lib-itoa","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\litemap-29a96c48ca2edefa\lib-litemap.json
+{"rustc":7895727629726570510,"features":"[]","declared_features":"[\"alloc\", \"databake\", \"default\", \"serde\", \"testing\", \"yoke\"]","target":6548088149557820361,"profile":15657897354478470176,"path":17561967086543845336,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\litemap-29a96c48ca2edefa\\dep-lib-litemap","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\memchr-aa8f9a3cbbce4db0\lib-memchr.json
+{"rustc":7895727629726570510,"features":"[\"alloc\", \"default\", \"std\"]","declared_features":"[\"alloc\", \"core\", \"default\", \"libc\", \"logging\", \"rustc-dep-of-std\", \"std\", \"use_std\"]","target":11745930252914242013,"profile":15657897354478470176,"path":8946328601852687632,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\memchr-aa8f9a3cbbce4db0\\dep-lib-memchr","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\rand_core-ca5fc4fcb7da86b6\lib-rand_core.json
+{"rustc":7895727629726570510,"features":"[\"alloc\", \"getrandom\", \"std\"]","declared_features":"[\"alloc\", \"getrandom\", \"serde\", \"serde1\", \"std\"]","target":13770603672348587087,"profile":2225463790103693989,"path":14955306503512067326,"deps":[[9920160576179037441,"getrandom",false,269121305339136323]],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\rand_core-ca5fc4fcb7da86b6\\dep-lib-rand_core","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\siphasher-d416d12b74804f36\lib-siphasher.json
+{"rustc":7895727629726570510,"features":"[\"default\", \"std\"]","declared_features":"[\"default\", \"serde\", \"serde_json\", \"serde_no_std\", \"serde_std\", \"std\"]","target":6846127388476139628,"profile":15657897354478470176,"path":5471393859944202020,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\siphasher-d416d12b74804f36\\dep-lib-siphasher","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\smallvec-628443efc9ab7c1b\lib-smallvec.json
+{"rustc":7895727629726570510,"features":"[\"const_generics\"]","declared_features":"[\"arbitrary\", \"bincode\", \"const_generics\", \"const_new\", \"debugger_visualizer\", \"drain_filter\", \"drain_keep_rest\", \"impl_bincode\", \"malloc_size_of\", \"may_dangle\", \"serde\", \"specialization\", \"union\", \"unty\", \"write\"]","target":9091769176333489034,"profile":15657897354478470176,"path":11782698489716297708,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\smallvec-628443efc9ab7c1b\\dep-lib-smallvec","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\stable_deref_trait-2a72c7857e817255\lib-stable_deref_trait.json
+{"rustc":7895727629726570510,"features":"[\"alloc\", \"default\", \"std\"]","declared_features":"[\"alloc\", \"default\", \"std\"]","target":5616890217583455155,"profile":2225463790103693989,"path":17856608422408147237,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\stable_deref_trait-2a72c7857e817255\\dep-lib-stable_deref_trait","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\unicode-ident-59cf9ad09079dcbb\lib-unicode_ident.json
+{"rustc":7895727629726570510,"features":"[]","declared_features":"[]","target":5438535436255082082,"profile":2225463790103693989,"path":12303147247322426261,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\unicode-ident-59cf9ad09079dcbb\\dep-lib-unicode_ident","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\windows-link-ce4f0b2c15c7b075\lib-windows_link.json
+{"rustc":7895727629726570510,"features":"[]","declared_features":"[]","target":2558631941022679061,"profile":14508822251238124762,"path":10698298584452519247,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\windows-link-ce4f0b2c15c7b075\\dep-lib-windows_link","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\target\debug\.fingerprint\writeable-2f127b60e06f9fb1\lib-writeable.json
+{"rustc":7895727629726570510,"features":"[]","declared_features":"[\"alloc\", \"default\", \"either\"]","target":6209224040855486982,"profile":15657897354478470176,"path":17348259824220705819,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\writeable-2f127b60e06f9fb1\\dep-lib-writeable","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+>>> src-tauri\tauri.conf.json
+{
+"$schema": "https://schema.tauri.app/config/2",
+"productName": "OxI Search",
+"version": "0.1.0",
+"identifier": "com.oxi.search",
+"build": {
+"beforeDevCommand": "npm run dev",
+"devUrl": "http://localhost:1420",
+"beforeBuildCommand": "npm run build",
+"frontendDist": "../dist"
+},
+"app": {
+"windows": [
+{
+"title": "OxI Search",
+"width": 1200,
+"height": 800,
+"resizable": true,
+"fullscreen": false,
+"minWidth": 800,
+"minHeight": 600
+}
+],
+"security": {
+"csp": null
+}
+},
+"bundle": {
+"active": true,
+"targets": "all",
+"icon": [
+"icons/32x32.png",
+"icons/128x128.png",
+"icons/128x128@2x.png",
+"icons/icon.icns",
+"icons/icon.ico"
+]
+}
+}
+>>> tailwind.config.js
+/** @type {import('tailwindcss').Config} */
+export default {
+content: [
+"./index.html",
+"./src/**/*.{js,ts,jsx,tsx}",
+],
+theme: {
+extend: {},
+},
+plugins: [],
+}
+>>> tsconfig.json
+{
+"compilerOptions": {
+"target": "ES2020",
+"useDefineForClassFields": true,
+"lib": ["ES2020", "DOM", "DOM.Iterable"],
+"module": "ESNext",
+"skipLibCheck": true,
+/* Bundler mode */
+"moduleResolution": "bundler",
+"allowImportingTsExtensions": true,
+"resolveJsonModule": true,
+"isolatedModules": true,
+"noEmit": true,
+"jsx": "react-jsx",
+/* Linting */
+"strict": true,
+"noUnusedLocals": true,
+"noUnusedParameters": true,
+"noFallthroughCasesInSwitch": true
+},
+"include": ["src"],
+"references": [{ "path": "./tsconfig.node.json" }]
+}
+>>> tsconfig.node.json
+{
+"compilerOptions": {
+"composite": true,
+"skipLibCheck": true,
+"module": "ESNext",
+"moduleResolution": "bundler",
+"allowSyntheticDefaultImports": true
+},
+"include": ["vite.config.ts"]
+}
+>>> vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+// @ts-expect-error process is a nodejs global
+const host = process.env.TAURI_DEV_HOST;
+// https://vite.dev/config/
+export default defineConfig(async () => ({
+plugins: [react()],
+// Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
+//
+// 1. prevent Vite from obscuring rust errors
+clearScreen: false,
+// 2. tauri expects a fixed port, fail if that port is not available
+server: {
+port: 1420,
+strictPort: true,
+host: host || false,
+hmr: host
+? {
+protocol: "ws",
+host,
+port: 1421,
+}
+: undefined,
+watch: {
+// 3. tell Vite to ignore watching `src-tauri`
+ignored: ["**/src-tauri/**"],
+},
+},
+}));
