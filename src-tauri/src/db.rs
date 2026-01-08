@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 use std::path::PathBuf;
-use tracing::{error, info};
+use tracing::info;
 
 pub struct Database {
     conn: Connection,
@@ -71,6 +71,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn delete_file(&self, path: &str) -> Result<()> {
         self.conn
             .execute("DELETE FROM search_index WHERE path = ?1", [path])?;
@@ -157,6 +158,7 @@ impl Database {
         Ok(result)
     }
 
+    #[allow(dead_code)]
     pub fn delete_stale_entries(&self, older_than_hours: i64) -> Result<usize> {
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(older_than_hours);
         let cutoff_str = cutoff.to_rfc3339();
@@ -169,11 +171,13 @@ impl Database {
         Ok(result as usize)
     }
 
+    #[allow(dead_code)]
     pub fn vacuum(&self) -> Result<()> {
         self.conn.execute("VACUUM", [])?;
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_connection(&self) -> &Connection {
         &self.conn
     }

@@ -37,11 +37,12 @@
     ┌───────────────────────────────────────────────────────┐
     │                Core Rust                              │
     │  ┌────────────────┐  ┌──────────────────────────┐    │
-    │  │  Indexer       │  │   Searcher               │    │
-    │  │  - walkdir     │  │   - Exact search         │    │
-    │  │  - parallel    │  │   - Fuzzy search         │    │
-    │  │  - incremental │  │   - Regex support        │    │
-    │  └────────────────┘  └──────────────────────────┘    │
+     │  │  Indexer       │  │   Searcher               │    │
+     │  │  - walkdir     │  │   - Exact search         │    │
+     │  │  - sequential  │  │   - Fuzzy search         │    │
+     │  │  - auto-disk   │  │   - Regex support        │    │
+     │  │  - auto-start  │  │                          │    │
+     │  └────────────────┘  └──────────────────────────┘    │
     │  ┌────────────────┐  ┌──────────────────────────┐    │
     │  │  Cache         │  │   Filters                │    │
     │  │  - TTL         │  │   - By extension         │    │
@@ -71,26 +72,33 @@
 
 **Responsabilidades**:
 - Indexado recursivo del filesystem
-- Indexación incremental (solo cambios)
-- Detección de archivos eliminados
+- **Auto-indexing al iniciar la aplicación** (si DB está vacía)
+- **Detección automática de discos** (Linux: /proc/mounts, Windows: letras de unidad)
+- Indexación secuencial completa (evita conflictos con SQLite)
 - Soporte para exclusiones (.gitignore-like)
+- Progreso en tiempo real vía Tauri events
 
 **Módulos**:
 - `indexer.rs`: Core del indexador con walkdir
-- `incremental.rs`: Lógica para indexado incremental
-- `exclusions.rs`: Manejo de patterns de exclusión
-- `progress.rs`: Reporte de progreso
+- `get_default_indexing_paths()`: Detección automática de discos
+- `index_path()`: Indexación secuencial de paths
+- `index_multiple_paths()`: Indexación de múltiples paths
+- `get_default_exclude_patterns()`: Patterns de exclusión por defecto
 
 **Flujo de indexación**:
-1. Leer paths configurados
-2. Para cada path:
-   - Recorrer con walkdir (paralelo si es grande)
+1. **Auto-indexing en startup**:
+   - Verificar si DB tiene archivos indexados
+   - Si está vacía, iniciar auto-indexado automático
+2. Detectar paths a indexar:
+   - Linux: Leer /proc/mounts, excluir directorios del sistema
+   - Windows: Detectar todas las letras de unidad (C:, D:, etc.)
+3. Para cada path:
+   - Recorrer con walkdir (secuencial para evitar race conditions)
    - Para cada archivo:
      - Extraer metadata (nombre, tamaño, fecha, extensión)
      - Upsert en SQLite
-   - Detectar archivos eliminados (en DB pero no en filesystem)
-   - Marcar como deleted o eliminar
-3. Emitir evento de progreso
+   - Emitir eventos de progreso en tiempo real
+4. Completar y notificar a la UI
 
 ### 2.2 Searcher (Rust)
 
@@ -144,7 +152,7 @@ async fn search_files(
 ) -> Result<SearchResults, Error>
 
 #[tauri::command]
-async fn reindex_path(path: Option<String>) -> Result<(), Error>
+async fn reindex_path(path: Option<String>, exclude_patterns: Vec<String>) -> Result<String, Error>
 
 #[tauri::command]
 async fn get_indexing_status() -> Result<IndexingStatus, Error>
@@ -159,11 +167,33 @@ async fn update_config(config: SearchConfig) -> Result<(), Error>
 async fn open_location(path: String) -> Result<(), Error>
 ```
 
+**Auto-indexing en Startup**:
+```rust
+.setup(move |app| {
+    let db_for_setup = Arc::clone(&db);
+    let app_handle = app.handle().clone();
+
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async move {
+            let file_count = db_for_setup.lock().unwrap().get_file_count().unwrap_or(0);
+
+            if file_count == 0 {
+                info!("No files indexed yet, starting automatic indexing");
+                // Iniciar auto-indexado automático
+            }
+        });
+    });
+
+    Ok(())
+})
+```
+
 **Events**:
 ```rust
-emit!("indexing-started");
 emit!("indexing-progress", progress);
-emit!("indexing-completed");
+emit!("indexing-completed", count);
+emit!("indexing-error", error_message);
 ```
 
 ## 3. Base de Datos
@@ -229,9 +259,10 @@ LIMIT 50;
 ## 5. Concurrencia
 
 - Tokio runtime async en Rust
-- Parallel indexing con rayon/tokio::spawn
-- Mutex/RwLock para estado compartido
-- React state management (Zustand) para estado UI
+- **Sequential indexing** (para evitar race conditions con SQLite)
+- Mutex para acceso seguro a la base de datos
+- Auto-indexing en thread separado con `std::thread::spawn`
+- React state management para estado UI
 
 ## 6. Configuración
 

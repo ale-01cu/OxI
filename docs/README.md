@@ -13,7 +13,9 @@ Documentación para OxI Search - Buscador ultrarrápido de archivos.
 
 OxI Search es una aplicación de escritorio independiente dedicada exclusivamente a:
 - Búsqueda ultrarrápida de archivos y carpetas en el sistema local
-- Indexación incremental para búsquedas subsegundo
+- **Auto-indexing automático** al iniciar la aplicación por primera vez
+- **Detección automática de discos** y filesystems montados
+- Indexación completa y secuencial para máxima estabilidad
 - Abrir ubicación de archivos directamente desde resultados
 - Interfaz moderna e intuitiva
 
@@ -25,10 +27,12 @@ cd OxI
 
 # Instalar dependencias
 npm install
-cd src-tauri-search && cargo build
 
 # Ejecutar en desarrollo
-npm run tauri-search:dev
+npm run tauri dev
+
+# Build para producción
+npm run tauri build
 ```
 
 ## 🏗️ Arquitectura
@@ -39,14 +43,18 @@ npm run tauri-search:dev
 │  - Search Input                                     │
 │  - Results List                                     │
 │  - Filters (tipo, tamaño, fecha)                   │
+│  - Indexing Progress Indicator                      │
 ├─────────────────────────────────────────────────────┤
 │              Tauri Bridge                          │
 │  - Commands: search_files, reindex_path             │
-│  - Events: indexing-progress                        │
+│  - Events: indexing-progress, indexing-completed    │
+│  - Auto-indexing on startup                         │
 ├─────────────────────────────────────────────────────┤
 │         Core Rust                                   │
 │  - Search Engine (indexer, searcher, cache)        │
 │  - File Indexing (walkdir, ignore patterns)        │
+│  - Auto disk detection (/proc/mounts, drives)      │
+│  - Sequential indexing (no SQLite conflicts)      │
 ├─────────────────────────────────────────────────────┤
 │              SQLite (local)                        │
 │  - search_index (caché de archivos indexados)      │

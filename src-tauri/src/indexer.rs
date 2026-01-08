@@ -43,74 +43,62 @@ impl Indexer {
             });
         }
 
-        let walker = walk.build_parallel();
-        let count = Arc::new(Mutex::new(0usize));
+        let walker = walk.build();
+        let mut count = 0;
 
-        walker.run(|| {
-            let db = Arc::clone(&self.db);
-            let count = Arc::clone(&count);
-            let callback = Arc::clone(&progress_callback);
+        for result in walker {
+            if let Ok(entry) = result {
+                if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                    if let Ok(metadata) = entry.metadata() {
+                        if let Some(path_str) = entry.path().to_str() {
+                            if let Some(name) = entry.file_name().to_str() {
+                                let extension = entry
+                                    .path()
+                                    .extension()
+                                    .and_then(|e| e.to_str())
+                                    .map(|s| format!(".{}", s));
 
-            Box::new(move |result| {
-                if let Ok(entry) = result {
-                    if entry.file_type().map_or(false, |ft| ft.is_file()) {
-                        if let Ok(metadata) = entry.metadata() {
-                            if let Some(path_str) = entry.path().to_str() {
-                                if let Some(name) = entry.file_name().to_str() {
-                                    let extension = entry
-                                        .path()
-                                        .extension()
-                                        .and_then(|e| e.to_str())
-                                        .map(|s| format!(".{}", s));
+                                let modified_time: DateTime<Utc> = metadata
+                                    .modified()
+                                    .ok()
+                                    .map(|t| DateTime::<Utc>::from(t))
+                                    .unwrap_or_else(Utc::now);
 
-                                    let modified_time: DateTime<Utc> = metadata
-                                        .modified()
-                                        .ok()
-                                        .map(|t| DateTime::<Utc>::from(t))
-                                        .unwrap_or_else(Utc::now);
+                                let file_size = Some(metadata.len() as i64);
+                                let modified_time_str = modified_time.to_rfc3339();
+                                let last_indexed_str = Utc::now().to_rfc3339();
 
-                                    let file_size = Some(metadata.len() as i64);
-                                    let modified_time_str = modified_time.to_rfc3339();
-                                    let last_indexed_str = Utc::now().to_rfc3339();
+                                let db_guard = self.db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+                                if let Err(e) = db_guard.upsert_file(
+                                    path_str,
+                                    name,
+                                    extension.as_deref(),
+                                    file_size,
+                                    &modified_time_str,
+                                    &last_indexed_str,
+                                ) {
+                                    warn!("Failed to upsert file {}: {}", path_str, e);
+                                } else {
+                                    count += 1;
 
-                                    let db_clone = Arc::clone(&db);
-
-                                    if let Ok(db) = db_clone.try_lock() {
-                                    if let Err(e) = db.upsert_file(
-                                        path_str,
-                                        name,
-                                        extension.as_deref(),
-                                        file_size,
-                                        &modified_time_str,
-                                        &last_indexed_str,
-                                    ) {
-                                        warn!("Failed to upsert file {}: {}", path_str, e);
-                                    } else {
-                                        let mut cnt = count.lock().unwrap();
-                                        *cnt += 1;
-
-                                        callback(IndexingProgress {
-                                            current_path: path_str.to_string(),
-                                            files_processed: *cnt,
-                                            total_files: None,
-                                            status: "indexing".to_string(),
-                                        });
-                                    }
-                                };
+                                    progress_callback(IndexingProgress {
+                                        current_path: path_str.to_string(),
+                                        files_processed: count,
+                                        total_files: None,
+                                        status: "indexing".to_string(),
+                                    });
                                 }
                             }
                         }
                     }
                 }
-                ignore::WalkState::Continue
-            })
-        });
+            }
+        }
 
         let elapsed = start.elapsed();
-        let final_count = *count.lock().unwrap();
-        info!("Indexing completed: {} files in {:?}", final_count, elapsed);
+        info!("Indexing completed: {} files in {:?}", count, elapsed);
 
-        Ok(final_count)
+        Ok(count)
     }
 
     pub async fn index_multiple_paths(
@@ -135,16 +123,64 @@ impl Indexer {
     pub fn get_default_indexing_paths() -> Vec<String> {
         let mut paths = Vec::new();
 
-        if let Ok(home) = std::env::var("HOME") {
-            paths.push(home.clone());
-            paths.push(format!("{}/Documents", home));
-            paths.push(format!("{}/Downloads", home));
-            paths.push(format!("{}/Pictures", home));
-        } else if let Ok(home) = std::env::var("USERPROFILE") {
-            paths.push(home.clone());
-            paths.push(format!("{}\\Documents", home));
-            paths.push(format!("{}\\Downloads", home));
-            paths.push(format!("{}\\Pictures", home));
+        #[cfg(unix)]
+        {
+            if let Ok(home) = std::env::var("HOME") {
+                paths.push(home.clone());
+            }
+
+            let mount_file = "/proc/mounts";
+            if let Ok(content) = std::fs::read_to_string(mount_file) {
+                for line in content.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let mount_point = parts[1];
+                        let path = Path::new(mount_point);
+
+                        if path.exists() && path.is_dir() {
+                            let mount_path = mount_point.to_string();
+
+                            let should_include = mount_path != "/" &&
+                                               !mount_path.starts_with("/boot") &&
+                                               !mount_path.starts_with("/dev") &&
+                                               !mount_path.starts_with("/proc") &&
+                                               !mount_path.starts_with("/sys") &&
+                                               !mount_path.starts_with("/run") &&
+                                               !mount_path.starts_with("/tmp") &&
+                                               !mount_path.contains("/snap") &&
+                                               !mount_path.starts_with("/var/lib");
+
+                            if should_include && !paths.contains(&mount_path) {
+                                paths.push(mount_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            for drive in b'A'..=b'Z' {
+                let drive_path = format!("{}:\\", drive as char);
+                if Path::new(&drive_path).exists() {
+                    paths.push(drive_path);
+                }
+            }
+
+            if let Ok(home) = std::env::var("USERPROFILE") {
+                if !paths.contains(&home) {
+                    paths.push(home);
+                }
+            }
+        }
+
+        if paths.is_empty() {
+            if let Ok(home) = std::env::var("HOME") {
+                paths.push(home);
+            } else if let Ok(home) = std::env::var("USERPROFILE") {
+                paths.push(home);
+            }
         }
 
         paths

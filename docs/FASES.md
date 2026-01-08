@@ -55,11 +55,13 @@
 ### Tareas
 
 #### Indexing Features
-- [ ] Parallel indexing con rayon
+- [x] Sequential indexing (para evitar race conditions)
 - [ ] Indexado incremental (detectar cambios)
 - [ ] Detección de archivos eliminados
-- [ ] Exclusiones con .gitignore-like patterns
-- [ ] Progress reporting
+- [x] Exclusiones con .gitignore-like patterns
+- [x] Progress reporting
+- [x] Auto-indexing al iniciar la aplicación
+- [x] Detección automática de discos (Linux: /proc/mounts, Windows: letras de unidad)
 
 #### Configuración
 - [ ] Config file parsing (TOML)
@@ -68,11 +70,13 @@
 - [ ] Schedule de indexado (manual, hourly, daily)
 
 #### Tauri Commands
-- [ ] `reindex_path(path: Option<String>)`
-- [ ] `get_indexing_status()`
-- [ ] `get_config()`
-- [ ] `update_config(config)`
-- [ ] Events: `indexing-started`, `indexing-progress`, `indexing-completed`
+- [x] `reindex_path(path: Option<String>, exclude_patterns: Vec<String>)`
+- [x] `get_indexing_status()`
+- [x] `get_config()`
+- [x] `update_config(config)`
+- [x] `open_location(path: String)`
+- [x] Auto-indexing en startup (si DB está vacía)
+- [x] Events: `indexing-progress`, `indexing-completed`, `indexing-error`
 
 #### Testing
 - [ ] Unit tests para indexer

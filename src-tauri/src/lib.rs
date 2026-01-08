@@ -7,7 +7,7 @@ use indexer::Indexer;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter};
+use tauri::Emitter;
 use tracing::{error, info};
 use tracing_subscriber;
 use types::{IndexingStatus, SearchConfig, SearchFilters, SearchResults};
@@ -152,7 +152,7 @@ async fn update_config(config: SearchConfig) -> Result<(), String> {
 
 #[tauri::command]
 async fn open_location(path: String) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
+
 
     #[cfg(target_os = "windows")]
     {
@@ -215,10 +215,58 @@ pub fn run() {
 
     info!("Database initialized");
 
+    let db_for_tauri = Arc::clone(&db);
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
-        .manage(db)
+        .setup(move |app| {
+            let db_for_setup = Arc::clone(&db);
+            let app_handle = app.handle().clone();
+
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async move {
+                    let file_count = {
+                        let db_guard = db_for_setup.lock().unwrap();
+                        db_guard.get_file_count().unwrap_or(0)
+                    };
+
+                    if file_count == 0 {
+                        info!("No files indexed yet, starting automatic indexing");
+                        let indexer = Indexer::new(db_for_setup);
+
+                        let paths_to_index = Indexer::get_default_indexing_paths();
+                        let patterns = Indexer::get_default_exclude_patterns();
+
+                        let app_clone = app_handle.clone();
+                        let progress_callback = Arc::new(move |progress: types::IndexingProgress| {
+                            info!("Auto-indexing progress: {:?}", progress);
+                            let _ = app_clone.emit("indexing-progress", progress);
+                        });
+
+                        let result = indexer
+                            .index_multiple_paths(paths_to_index, patterns, progress_callback)
+                            .await;
+
+                        match result {
+                            Ok(count) => {
+                                info!("Auto-indexing completed: {} files", count);
+                                let _ = app_handle.emit("indexing-completed", count);
+                            }
+                            Err(e) => {
+                                error!("Auto-indexing failed: {}", e);
+                                let _ = app_handle.emit("indexing-error", e.to_string());
+                            }
+                        }
+                    } else {
+                        info!("Database already contains {} files, skipping auto-index", file_count);
+                    }
+                });
+            });
+
+            Ok(())
+        })
+        .manage(db_for_tauri)
         .invoke_handler(tauri::generate_handler![
             search_files,
             reindex_path,

@@ -27,12 +27,14 @@ OxI Search es una aplicación de escritorio dedicada exclusivamente a la búsque
 - Keyboard shortcuts (Ctrl+K para abrir buscador)
 
 ### Indexación
+- **Auto-indexing automático al iniciar** la aplicación (si DB está vacía)
+- **Detección automática de discos** (Linux: /proc/mounts, Windows: letras de unidad)
 - Indexado recursivo de directorios
-- Indexación incremental (solo archivos modificados)
+- Indexación secuencial completa (para evitar race conditions con SQLite)
 - Configuración de paths a excluir (.gitignore-like)
-- Indexación paralela para filesystems grandes
 - Progress indication durante indexado
 - Re-indexado manual opcional
+- Exclusión de directorios del sistema (/dev, /proc, /sys, /boot, etc.)
 
 ### UI/UX
 - Command palette (Ctrl+K)
