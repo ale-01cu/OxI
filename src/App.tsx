@@ -173,59 +173,69 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-black">
-      <div
+    <div className="min-h-screen bg-zinc-950 text-zinc-300">
+       <nav
         data-tauri-drag-region
         onMouseDown={startDragging}
         onDoubleClick={handleDoubleClickTitleBar}
-        className="h-8 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 select-none cursor-move"
+        className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10 select-none cursor-move py-2"
       >
-        <div className="flex items-center gap-2">
-          <Search className="w-5 h-5 text-orange-500" />
-          <span className="text-sm font-semibold text-gray-100">OxI Search</span>
-        </div>
-        <div className="text-xs text-gray-500">
-          Doble clic para maximizar/restaurar
-        </div>
-      </div>
-      <nav className="border-b border-gray-800 bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2 flex-1">
-              <Search className="w-8 h-8 text-orange-500" />
-              <span className="text-xl font-bold text-gray-100">OxI Search</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-500 flex-1">
-                {totalFiles} archivos indexados
+            {/* Logo y Nombre - También actúan como zona de arrastre */}
+            <div className="flex items-center gap-3 flex-1" data-tauri-drag-region>
+              <div className="p-2 bg-orange-950/30 rounded-lg border border-orange-900/30 pointer-events-none">
+                <Search className="w-6 h-6 text-orange-700" />
               </div>
+              <div className="flex flex-col justify-center pointer-events-none">
+                <span className="text-xl font-bold text-zinc-100 tracking-tight leading-none">
+                  OxI <span className="text-orange-800">Search</span>
+                </span>
+                <span className="text-[10px] text-zinc-600 font-medium uppercase tracking-[0.2em] mt-1">
+                  Engine v1.0
+                </span>
+              </div>
+            </div>
+
+            {/* Elementos Interactivos - Detenemos la propagación del drag aquí si es necesario, 
+                pero Tauri maneja bien los botones dentro de drag regions */}
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:block text-[10px] text-zinc-500 font-mono bg-zinc-950/50 px-2 py-1 rounded border border-zinc-800/50">
+                {totalFiles.toLocaleString()} ARCHIVOS
+              </div>
+              
               <button
-                onClick={startIndexing}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startIndexing();
+                }}
                 disabled={isIndexing}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-orange-900/20 text-orange-500 border border-orange-800/30 rounded-md hover:bg-orange-900/40 disabled:opacity-50 transition-all duration-200 font-medium text-sm"
               >
                 <HardDrive className="w-4 h-4" />
                 {isIndexing ? "Indexando..." : "Reindexar"}
               </button>
-              <button className="p-2 text-gray-500 hover:bg-gray-800 rounded-md">
-                <Settings className="w-6 h-6" />
+
+              <button className="p-2 text-zinc-500 hover:bg-zinc-800 rounded-md transition-colors">
+                <Settings className="w-5 h-5" />
               </button>
-              <div className="flex items-center gap-1 border-l border-gray-700 pl-4">
+
+              <div className="flex items-center gap-1 border-l border-zinc-800 ml-2 pl-3">
                 <button
                   onClick={minimizeWindow}
-                  className="p-2 text-gray-500 hover:bg-gray-800 rounded-md transition-colors"
+                  className="p-1.5 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-all"
                 >
                   <Minus className="w-4 h-4" />
                 </button>
                 <button
                   onClick={toggleMaximizeWindow}
-                  className="p-2 text-gray-500 hover:bg-gray-800 rounded-md transition-colors"
+                  className="p-1.5 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-all"
                 >
-                  <Square className="w-4 h-4" />
+                  <Square className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={closeWindow}
-                  className="p-2 text-gray-500 hover:bg-red-900/50 rounded-md transition-colors"
+                  className="p-1.5 text-zinc-500 hover:text-white hover:bg-red-950/50 rounded transition-all"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -236,19 +246,22 @@ function App() {
       </nav>
 
       {isIndexing && indexingProgress && (
-        <div className="border-b border-orange-900/50 bg-orange-900/10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+        <div className="border-b border-orange-900/30 bg-orange-950/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
             <div className="flex items-center gap-3">
               <div className="animate-spin">
-                <HardDrive className="w-5 h-5 text-orange-500" />
+                <HardDrive className="w-4 h-4 text-orange-800" />
               </div>
-              <div className="flex-1">
-                <div className="text-sm font-medium text-orange-100">
-                  Indexando: {indexingProgress.files_processed} archivos
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] uppercase tracking-widest font-bold text-orange-900">
+                  Indexando Archivos
                 </div>
-                <div className="text-xs text-orange-200 truncate max-w-2xl">
+                <div className="text-xs text-orange-700/80 truncate font-mono">
                   {indexingProgress.current_path}
                 </div>
+              </div>
+              <div className="text-xs font-mono text-orange-800">
+                {indexingProgress.files_processed}
               </div>
             </div>
           </div>
@@ -256,9 +269,9 @@ function App() {
       )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
+        <div className="mb-8">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-600 group-focus-within:text-orange-800 transition-colors" />
             <input
               type="text"
               value={query}
@@ -266,53 +279,59 @@ function App() {
                 setQuery(e.target.value);
                 handleSearch(e.target.value);
               }}
-              placeholder="Buscar archivos..."
-              className="w-full pl-12 pr-4 py-4 text-lg border border-gray-700 rounded-lg bg-gray-900 text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+              placeholder="Buscar en el sistema..."
+              className="w-full pl-12 pr-4 py-4 text-lg border border-zinc-800 rounded-xl bg-zinc-900/50 text-zinc-100 placeholder-zinc-600 focus:ring-2 focus:ring-orange-900/50 focus:border-orange-900/50 focus:bg-zinc-900 outline-none transition-all shadow-2xl"
               autoFocus
             />
           </div>
         </div>
 
         {isSearching && (
-          <div className="text-center py-12">
-            <div className="animate-spin inline-block w-8 h-8 border-4 border-orange-600 border-t-transparent rounded-full"></div>
-            <p className="mt-4 text-gray-500">Buscando...</p>
+          <div className="text-center py-20">
+            <div className="relative inline-block">
+              <div className="w-12 h-12 border-2 border-orange-900/20 border-t-orange-800 rounded-full animate-spin"></div>
+            </div>
+            <p className="mt-4 text-zinc-600 font-medium tracking-wide uppercase text-xs">Buscando coincidencias...</p>
           </div>
         )}
 
         {!isSearching && results.length > 0 && (
-          <div className="bg-gray-900 rounded-lg shadow-sm border border-gray-800 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-800">
-              <h2 className="text-sm font-medium text-gray-400">
-                {results.length} resultados encontrados
+          <div className="bg-zinc-900/30 rounded-xl shadow-2xl border border-zinc-800/50 overflow-hidden backdrop-blur-sm">
+            <div className="px-4 py-3 border-b border-zinc-800/50 bg-zinc-900/50 flex justify-between items-center">
+              <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                {results.length} Coincidencias encontradas
               </h2>
             </div>
-            <ul className="divide-y divide-gray-800">
+            <ul className="divide-y divide-zinc-800/50">
               {results.map((result, index) => (
                 <li
                   key={index}
-                  className="px-4 py-3 hover:bg-gray-800 transition-colors"
+                  className="px-4 py-4 hover:bg-orange-950/5 transition-colors group"
                 >
-                  <div className="flex items-start gap-3">
-                    <FileText className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex items-start gap-4">
+                    <div className="p-2 bg-zinc-800/50 rounded group-hover:bg-orange-900/20 transition-colors">
+                      <FileText className="w-5 h-5 text-zinc-500 group-hover:text-orange-800 transition-colors" />
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-medium text-gray-100 truncate">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-sm font-semibold text-zinc-200 truncate group-hover:text-white transition-colors">
                           {result.name}
                         </h3>
-                        <span className="text-xs text-gray-500 flex-shrink-0">
-                          {result.extension}
-                        </span>
+                        {result.extension && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-zinc-800 text-zinc-500 rounded uppercase">
+                            {result.extension.replace('.', '')}
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-500 truncate mt-1">
+                      <div className="text-xs text-zinc-600 truncate font-mono mb-3">
                         {result.path}
                       </div>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span>{formatFileSize(result.file_size)}</span>
-                        <span>{formatDate(result.modified_time)}</span>
+                      <div className="flex items-center gap-6 text-[10px] font-medium uppercase tracking-wider">
+                        <span className="text-zinc-500 bg-zinc-800/30 px-2 py-0.5 rounded">{formatFileSize(result.file_size)}</span>
+                        <span className="text-zinc-500">{formatDate(result.modified_time)}</span>
                         <button
                           onClick={() => openLocation(result.path)}
-                          className="text-orange-500 hover:text-orange-400 transition-colors"
+                          className="ml-auto text-orange-800 hover:text-orange-600 font-bold transition-colors underline-offset-4 hover:underline"
                         >
                           Abrir ubicación
                         </button>
@@ -326,13 +345,13 @@ function App() {
         )}
 
         {!isSearching && query && results.length === 0 && (
-          <div className="text-center py-12">
-            <FileText className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-100 mb-2">
-              No se encontraron resultados
+          <div className="text-center py-20 bg-zinc-900/20 rounded-xl border border-dashed border-zinc-800">
+            <Search className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
+            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-1">
+              Sin resultados
             </h3>
-            <p className="text-sm text-gray-500">
-              Intenta con otra búsqueda
+            <p className="text-xs text-zinc-600 font-medium">
+              No se encontraron archivos que coincidan con "{query}"
             </p>
           </div>
         )}
