@@ -1,22 +1,14 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  Search,
-  HardDrive,
-  Settings,
-  FileText,
-  Minus,
-  Square,
-  X,
-} from "lucide-react";
+import { Search, HardDrive, Settings, FileText, Folder, Minus, Square, X } from "lucide-react";
 
 interface SearchResult {
   path: string;
   name: string;
   extension: string | null;
   file_size: number | null;
+  is_dir: boolean;
   modified_time: string;
   score: number;
 }
@@ -202,9 +194,9 @@ function App() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 text-zinc-300 overflow-hidden">
-      {/* Title Bar - Zona de arrastre */}
-      <nav
+    <div className="min-h-screen bg-zinc-950 text-zinc-300 border-4 border-zinc-900/50 border-solid">
+       <nav
+        data-tauri-drag-region
         onMouseDown={startDragging}
         onDoubleClick={handleDoubleClickTitleBar}
         className="flex-shrink-0 border-b border-zinc-800 bg-zinc-900 select-none"
@@ -332,63 +324,70 @@ function App() {
             </div>
           )}
 
-          {/* Resultados */}
-          {!isSearching && results.length > 0 && (
-            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800/60 overflow-hidden">
-              <div className="px-4 py-3 border-b border-zinc-800/50 bg-zinc-900/80 flex justify-between items-center">
-                <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                  {results.length} Coincidencias encontradas
-                </h2>
-              </div>
-              <ul className="divide-y divide-zinc-800/40">
-                {results.map((result, index) => (
-                  <li
-                    key={index}
-                    className="px-4 py-3 hover:bg-orange-950/10 transition-colors group cursor-pointer"
-                    onClick={() => openLocation(result.path)}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-zinc-800/50 rounded group-hover:bg-orange-900/30 transition-colors flex-shrink-0">
-                        <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 group-hover:text-orange-700 transition-colors" />
+        {!isSearching && results.length > 0 && (
+          <div className="bg-zinc-900/30 rounded-xl shadow-2xl border border-zinc-800/50 overflow-hidden backdrop-blur-sm">
+            <div className="px-4 py-3 border-b border-zinc-800/50 bg-zinc-900/50 flex justify-between items-center">
+              <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                {results.length} Coincidencias encontradas
+              </h2>
+            </div>
+            <ul className="divide-y divide-zinc-800/50">
+              {results.map((result, index) => (
+                <li
+                  key={index}
+                  className="px-4 py-4 hover:bg-orange-950/5 transition-colors group"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="p-2 bg-zinc-800/50 rounded group-hover:bg-orange-900/20 transition-colors">
+                      {result.is_dir ? (
+                        <Folder className="w-5 h-5 text-orange-700 group-hover:text-orange-500 transition-colors" />
+                      ) : (
+                        <FileText className="w-5 h-5 text-zinc-500 group-hover:text-orange-800 transition-colors" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-sm font-semibold text-zinc-200 truncate group-hover:text-white transition-colors">
+                          {result.name}
+                        </h3>
+                        {!result.is_dir && result.extension && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-zinc-800 text-zinc-500 rounded uppercase">
+                            {result.extension.replace('.', '')}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="text-sm font-semibold text-zinc-200 truncate group-hover:text-white transition-colors">
-                            {result.name}
-                          </h3>
-                          {result.extension && (
-                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-zinc-800 text-zinc-500 rounded uppercase flex-shrink-0">
-                              {result.extension.replace(".", "")}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-zinc-600 truncate font-mono mb-2">
-                          {result.path}
-                        </div>
-                        <div className="flex items-center gap-3 sm:gap-5 text-[10px] font-medium uppercase tracking-wider flex-wrap">
-                          <span className="text-zinc-500 bg-zinc-800/40 px-2 py-0.5 rounded">
-                            {formatFileSize(result.file_size)}
-                          </span>
-                          <span className="text-zinc-500">
-                            {formatDate(result.modified_time)}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openLocation(result.path);
-                            }}
-                            className="ml-auto text-orange-700 hover:text-orange-500 font-bold transition-colors"
-                          >
-                            Abrir ubicación
-                          </button>
-                        </div>
+                      <div className="text-xs text-zinc-600 truncate font-mono mb-3">
+                        {result.path}
+                      </div>
+                      <div className="flex items-center gap-6 text-[10px] font-medium uppercase tracking-wider">
+                        <span className="text-zinc-500 bg-zinc-800/30 px-2 py-0.5 rounded">{result.is_dir ? "Carpeta" : formatFileSize(result.file_size)}</span>
+                        <span className="text-zinc-500">{formatDate(result.modified_time)}</span>
+                        <button
+                          onClick={() => openLocation(result.path)}
+                          className="ml-auto text-orange-800 hover:text-orange-600 font-bold transition-colors underline-offset-4 hover:underline"
+                        >
+                          Abrir ubicación
+                        </button>
                       </div>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!query && !isSearching && results.length === 0 && (
+          <div className="text-center py-20 bg-zinc-900/20 rounded-xl border border-dashed border-zinc-800">
+            <Search className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
+            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-1">
+              Buscar con OxI
+            </h3>
+            <p className="text-xs text-zinc-600 font-medium">
+              Busca en tu sistema de archivos para encontrar archivos y carpetas.
+            </p>
+          </div>
+        )}
 
           {/* Sin resultados */}
           {!isSearching && query && results.length === 0 && (

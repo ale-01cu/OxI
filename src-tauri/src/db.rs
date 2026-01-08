@@ -24,6 +24,7 @@ impl Database {
                 name TEXT NOT NULL,
                 extension TEXT,
                 file_size INTEGER,
+                is_dir INTEGER NOT NULL DEFAULT 0,
                 modified_time TEXT NOT NULL,
                 last_indexed TEXT NOT NULL
             )",
@@ -50,6 +51,11 @@ impl Database {
             [],
         )?;
 
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_search_is_dir ON search_index(is_dir)",
+            [],
+        )?;
+
         info!("Database schema initialized");
         Ok(())
     }
@@ -60,13 +66,14 @@ impl Database {
         name: &str,
         extension: Option<&str>,
         file_size: Option<i64>,
+        is_dir: bool,
         modified_time: &str,
         last_indexed: &str,
     ) -> Result<()> {
         self.conn.execute(
-            "INSERT OR REPLACE INTO search_index (path, name, extension, file_size, modified_time, last_indexed)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![path, name, extension, file_size, modified_time, last_indexed],
+            "INSERT OR REPLACE INTO search_index (path, name, extension, file_size, is_dir, modified_time, last_indexed)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![path, name, extension, file_size, is_dir as i64, modified_time, last_indexed],
         )?;
         Ok(())
     }
@@ -102,8 +109,8 @@ impl Database {
         min_size: Option<i64>,
         max_size: Option<i64>,
         limit: usize,
-    ) -> Result<Vec<(String, String, Option<String>, Option<i64>, String)>> {
-        let mut sql = "SELECT path, name, extension, file_size, modified_time FROM search_index WHERE name LIKE ?1".to_string();
+    ) -> Result<Vec<(String, String, Option<String>, Option<i64>, bool, String)>> {
+        let mut sql = "SELECT path, name, extension, file_size, is_dir, modified_time FROM search_index WHERE name LIKE ?1".to_string();
         let query_pattern = format!("%{}%", query);
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(query_pattern)];
 
@@ -127,7 +134,7 @@ impl Database {
             params.push(Box::new(max));
         }
 
-        sql.push_str(" ORDER BY name ASC LIMIT ?");
+        sql.push_str(" ORDER BY is_dir DESC, name ASC LIMIT ?");
         params.push(Box::new(limit as i64));
 
         let mut stmt = self.conn.prepare(&sql)?;
@@ -142,6 +149,7 @@ impl Database {
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
+                row.get(5)?,
             ));
         }
 
