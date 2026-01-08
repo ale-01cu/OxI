@@ -18,6 +18,7 @@ pub struct SearchResult {
     pub name: String,
     pub extension: Option<String>,
     pub file_size: Option<u64>,
+    pub is_dir: bool,
     pub modified_time: String,
     pub score: f64,
 }

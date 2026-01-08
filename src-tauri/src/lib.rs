@@ -48,11 +48,12 @@ async fn search_files(
     let results: Vec<types::SearchResult> = results
         .into_iter()
         .map(
-            |(path, name, extension, file_size, modified_time)| types::SearchResult {
+            |(path, name, extension, file_size, is_dir, modified_time)| types::SearchResult {
                 path,
                 name,
                 extension,
                 file_size: file_size.map(|s| s as u64),
+                is_dir,
                 modified_time,
                 score: 1.0,
             },

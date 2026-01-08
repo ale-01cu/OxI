@@ -48,7 +48,37 @@ impl Indexer {
 
         for result in walker {
             if let Ok(entry) = result {
-                if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                if entry.file_type().map_or(false, |ft| ft.is_dir()) {
+                    if let Some(path_str) = entry.path().to_str() {
+                        if let Some(name) = entry.file_name().to_str() {
+                            let modified_time: DateTime<Utc> = Utc::now();
+                            let modified_time_str = modified_time.to_rfc3339();
+                            let last_indexed_str = Utc::now().to_rfc3339();
+
+                            let db_guard = self.db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+                            if let Err(e) = db_guard.upsert_file(
+                                path_str,
+                                name,
+                                None,
+                                None,
+                                true,
+                                &modified_time_str,
+                                &last_indexed_str,
+                            ) {
+                                warn!("Failed to upsert directory {}: {}", path_str, e);
+                            } else {
+                                count += 1;
+
+                                progress_callback(IndexingProgress {
+                                    current_path: path_str.to_string(),
+                                    files_processed: count,
+                                    total_files: None,
+                                    status: "indexing".to_string(),
+                                });
+                            }
+                        }
+                    }
+                } else if entry.file_type().map_or(false, |ft| ft.is_file()) {
                     if let Ok(metadata) = entry.metadata() {
                         if let Some(path_str) = entry.path().to_str() {
                             if let Some(name) = entry.file_name().to_str() {
@@ -74,6 +104,7 @@ impl Indexer {
                                     name,
                                     extension.as_deref(),
                                     file_size,
+                                    false,
                                     &modified_time_str,
                                     &last_indexed_str,
                                 ) {
@@ -96,7 +127,7 @@ impl Indexer {
         }
 
         let elapsed = start.elapsed();
-        info!("Indexing completed: {} files in {:?}", count, elapsed);
+        info!("Indexing completed: {} items in {:?}", count, elapsed);
 
         Ok(count)
     }
