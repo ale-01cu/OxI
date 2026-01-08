@@ -7,7 +7,7 @@ use indexer::Indexer;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tracing::{error, info};
 use tracing_subscriber;
 use types::{IndexingStatus, SearchConfig, SearchFilters, SearchResults};
@@ -151,8 +151,44 @@ async fn update_config(config: SearchConfig) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn open_location(path: String) -> Result<(), String> {
+async fn minimize_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        window.minimize().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 
+#[tauri::command]
+async fn toggle_maximize_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let is_maximized = window.is_maximized().map_err(|e| e.to_string())?;
+        if is_maximized {
+            window.unmaximize().map_err(|e| e.to_string())?;
+        } else {
+            window.maximize().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        window.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_dragging(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        window.start_dragging().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_location(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
@@ -274,6 +310,10 @@ pub fn run() {
             get_config,
             update_config,
             open_location,
+            minimize_window,
+            toggle_maximize_window,
+            close_window,
+            start_dragging,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

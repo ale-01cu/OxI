@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Search, HardDrive, Settings, FileText } from "lucide-react";
+import { Search, HardDrive, Settings, FileText, Minus, Square, X } from "lucide-react";
 
 interface SearchResult {
   path: string;
@@ -112,6 +112,44 @@ function App() {
     }
   };
 
+  const minimizeWindow = async () => {
+    try {
+      await invoke("minimize_window");
+    } catch (error) {
+      console.error("Failed to minimize window:", error);
+    }
+  };
+
+  const toggleMaximizeWindow = async () => {
+    try {
+      await invoke("toggle_maximize_window");
+    } catch (error) {
+      console.error("Failed to toggle maximize window:", error);
+    }
+  };
+
+  const closeWindow = async () => {
+    try {
+      await invoke("close_window");
+    } catch (error) {
+      console.error("Failed to close window:", error);
+    }
+  };
+
+  const handleDoubleClickTitleBar = async () => {
+    await toggleMaximizeWindow();
+  };
+
+  const startDragging = async (e: React.MouseEvent) => {
+    if (e.button === 0) {
+      try {
+        await invoke("start_dragging");
+      } catch (error) {
+        console.error("Failed to start dragging:", error);
+      }
+    }
+  };
+
   const formatFileSize = (bytes: number | null) => {
     if (!bytes) return "-";
     const units = ["B", "KB", "MB", "GB"];
@@ -136,15 +174,29 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div
+        data-tauri-drag-region
+        onMouseDown={startDragging}
+        onDoubleClick={handleDoubleClickTitleBar}
+        className="h-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 select-none cursor-move"
+      >
+        <div className="flex items-center gap-2">
+          <Search className="w-5 h-5 text-blue-600" />
+          <span className="text-sm font-semibold">OxI Search</span>
+        </div>
+        <div className="text-xs text-gray-600 dark:text-gray-400">
+          Doble clic para maximizar/restaurar
+        </div>
+      </div>
       <nav className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
               <Search className="w-8 h-8 text-blue-600" />
               <span className="text-xl font-bold">OxI Search</span>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-gray-600 dark:text-gray-400 flex-1">
                 {totalFiles} archivos indexados
               </div>
               <button
@@ -158,6 +210,26 @@ function App() {
               <button className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
                 <Settings className="w-6 h-6" />
               </button>
+              <div className="flex items-center gap-1 border-l border-gray-300 dark:border-gray-600 pl-4">
+                <button
+                  onClick={minimizeWindow}
+                  className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={toggleMaximizeWindow}
+                  className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                >
+                  <Square className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={closeWindow}
+                  className="p-2 text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
