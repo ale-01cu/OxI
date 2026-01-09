@@ -15,12 +15,14 @@
         "title": "OxI Search",
         "width": 1200,
         "height": 800,
-        "resizable": true,
+        "resizable": false,
         "fullscreen": false,
         "minWidth": 800,
-        "minHeight": 600,
+        "minHeight": 800,
         "decorations": false,
-        "transparent": false
+        "transparent": true,
+        "shadow": false,
+        "center": true
       }
     ],
     "security": {
