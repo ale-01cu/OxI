@@ -15,7 +15,7 @@ EXCLUDED = [
     "consolidate.js", "consolidate.py", ".env", ".env.local",
     ".env.production", ".env.development", "package-lock.json", "yarn.lock",
     "pnpm-lock.yaml", "pnpm-workspace.yaml", "public", ".dockerignore",
-    ".gitignore", "TODO.md", 'Libraries', 'packages', 'bin'
+    ".gitignore", "TODO.md", 'Libraries', 'packages', 'bin', 'target'
 ]
 
 MAX_UNIFIED_SIZE = 1 * 1024 * 1024          # 1 MB

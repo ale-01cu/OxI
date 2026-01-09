@@ -7,12 +7,27 @@ use indexer::Indexer;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use dirs;
 use tauri::{Emitter, Manager};
 use tracing::{error, info};
 use tracing_subscriber;
 use types::{IndexingStatus, SearchConfig, SearchFilters, SearchResults};
 
 static DB_PATH: &str = "oxi-search.db";
+
+fn get_db_path() -> PathBuf {
+    if cfg!(debug_assertions) {
+        // En desarrollo, usar el directorio de datos del usuario
+        let mut path = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+        path.push("OxI Search");
+        std::fs::create_dir_all(&path).unwrap_or_default();
+        path.push("oxi-search.db");
+        path
+    } else {
+        // En producción, usar el directorio actual
+        PathBuf::from(DB_PATH)
+    }
+}
 
 #[tauri::command]
 async fn search_files(
@@ -241,7 +256,7 @@ pub fn run() {
 
     info!("OxI Search starting...");
 
-    let db_path = PathBuf::from(DB_PATH);
+    let db_path = get_db_path();
     let db = match Database::new(db_path) {
         Ok(db) => Arc::new(Mutex::new(db)),
         Err(e) => {

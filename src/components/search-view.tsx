@@ -114,6 +114,15 @@ function App() {
     }
   };
 
+  const openItem = async (path: string, isDir: boolean) => {
+    try {
+      await invoke("open_item", { path, isDir });
+    } catch (error) {
+      console.error("Failed to open item:", error);
+    }
+  };
+  
+
   const minimizeWindow = async () => {
     try {
       await invoke("minimize_window");
@@ -386,12 +395,18 @@ function App() {
                           <span className="text-zinc-500">
                             {formatDate(result.modified_time)}
                           </span>
-                          <button
-                            onClick={() => openLocation(result.path)}
-                            className="ml-auto text-orange-800 hover:text-orange-600 font-bold transition-colors underline-offset-4 hover:underline"
-                          >
-                            Abrir ubicación
-                          </button>
+                           <button
+                             onClick={() => openLocation(result.path)}
+                             className="mr-2 text-orange-800 hover:text-orange-600 font-bold transition-colors underline-offset-4 hover:underline"
+                           >
+                             Abrir ubicación
+                           </button>
+                           <button
+                             onClick={() => openItem(result.path, result.is_dir)}
+                             className="text-orange-800 hover:text-orange-600 font-bold transition-colors underline-offset-4 hover:underline"
+                           >
+                             Abrir
+                           </button>
                         </div>
                       </div>
                     </div>

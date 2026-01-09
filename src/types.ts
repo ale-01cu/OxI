@@ -3,6 +3,7 @@ export interface SearchResult {
   name: string;
   extension: string | null;
   file_size: number | null;
+  is_dir: boolean;
   modified_time: string;
   score: number;
 }

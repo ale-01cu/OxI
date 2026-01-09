@@ -20,8 +20,10 @@ impl Database {
         // Beneficio: Escritura casi a la velocidad de la RAM.
         conn.pragma_update(None, "synchronous", &0)?;
 
-        // 2. Usa Write-Ahead Logging. Permite leer y escribir al mismo tiempo.
-        conn.pragma_update(None, "journal_mode", &"WAL")?;
+        // 2. Usa Write-Ahead Logging solo en producción. En desarrollo usa DELETE para evitar problemas de watch.
+        if cfg!(not(debug_assertions)) {
+            conn.pragma_update(None, "journal_mode", &"WAL")?;
+        }
 
         // 3. Aumenta la memoria caché que usa SQLite (aprox 50MB).
         conn.pragma_update(None, "cache_size", &-50000)?;
