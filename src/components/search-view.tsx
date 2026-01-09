@@ -1,30 +1,44 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Search, HardDrive, Settings, FileText, Minus, Square, X, Clock } from "lucide-react";
+import {
+  Search,
+  HardDrive,
+  Settings,
+  FileText,
+  Minus,
+  Square,
+  X,
+  Clock,
+} from "lucide-react";
 import { SearchResult, SearchResults, IndexingProgress } from "../types";
-
 
 function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isIndexing, setIsIndexing] = useState(false);
-  const [indexingProgress, setIndexingProgress] = useState<IndexingProgress | null>(null);
+  const [indexingProgress, setIndexingProgress] =
+    useState<IndexingProgress | null>(null);
   const [totalFiles, setTotalFiles] = useState(0);
-  const [indexingStartTime, setIndexingStartTime] = useState<number | null>(null);
+  const [indexingStartTime, setIndexingStartTime] = useState<number | null>(
+    null
+  );
   const [indexingDuration, setIndexingDuration] = useState<number | null>(null);
 
   useEffect(() => {
     loadIndexingStatus();
 
-    const unlistenProgress = listen<IndexingProgress>("indexing-progress", (event) => {
-      setIndexingProgress(event.payload);
-      setIsIndexing(true);
-      if (!indexingStartTime) {
-        setIndexingStartTime(Date.now());
+    const unlistenProgress = listen<IndexingProgress>(
+      "indexing-progress",
+      (event) => {
+        setIndexingProgress(event.payload);
+        setIsIndexing(true);
+        if (!indexingStartTime) {
+          setIndexingStartTime(Date.now());
+        }
       }
-    });
+    );
 
     const unlistenCompleted = listen<number>("indexing-completed", (event) => {
       setTotalFiles(event.payload);
@@ -39,8 +53,8 @@ function App() {
     });
 
     return () => {
-      unlistenProgress.then(f => f());
-      unlistenCompleted.then(f => f());
+      unlistenProgress.then((f) => f());
+      unlistenCompleted.then((f) => f());
     };
   }, []);
 
@@ -175,7 +189,7 @@ function App() {
   };
 
   return (
-    <div className="h-screen bg-zinc-950 text-zinc-300 border-4 border-zinc-900/70 flex flex-col">
+    <div className="h-screen bg-zinc-950 text-zinc-300 border-5 rounded-xl border-zinc-900/70 flex flex-col">
       <style>{`
         ::-webkit-scrollbar {
           width: 8px;
@@ -194,7 +208,7 @@ function App() {
       <nav
         data-tauri-drag-region
         onDoubleClick={handleDoubleClickTitleBar}
-        className="border-b border-zinc-900/70 bg-zinc-900/50 backdrop-blur-sm flex-shrink-0 select-none py-2"
+        className="border-b border-zinc-900/70 bg-zinc-900/50 backdrop-blur-sm flex-shrink-0 select-none"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
@@ -306,7 +320,7 @@ function App() {
 
       <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
+          <div className="sticky -top-8 z-10 mb-8 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-900/70">
             <div className="relative group">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-600 group-focus-within:text-orange-800 transition-colors" />
               <input
@@ -328,7 +342,9 @@ function App() {
               <div className="relative inline-block">
                 <div className="w-12 h-12 border-2 border-orange-900/20 border-t-orange-800 rounded-full animate-spin"></div>
               </div>
-              <p className="mt-4 text-zinc-600 font-medium tracking-wide uppercase text-xs">Buscando coincidencias...</p>
+              <p className="mt-4 text-zinc-600 font-medium tracking-wide uppercase text-xs">
+                Buscando coincidencias...
+              </p>
             </div>
           )}
 
@@ -356,7 +372,7 @@ function App() {
                           </h3>
                           {result.extension && (
                             <span className="px-1.5 py-0.5 text-[10px] font-bold bg-zinc-800 text-zinc-500 rounded uppercase">
-                              {result.extension.replace('.', '')}
+                              {result.extension.replace(".", "")}
                             </span>
                           )}
                         </div>
@@ -364,8 +380,12 @@ function App() {
                           {result.path}
                         </div>
                         <div className="flex items-center gap-6 text-[10px] font-medium uppercase tracking-wider">
-                          <span className="text-zinc-500 bg-zinc-800/30 px-2 py-0.5 rounded">{formatFileSize(result.file_size)}</span>
-                          <span className="text-zinc-500">{formatDate(result.modified_time)}</span>
+                          <span className="text-zinc-500 bg-zinc-800/30 px-2 py-0.5 rounded">
+                            {formatFileSize(result.file_size)}
+                          </span>
+                          <span className="text-zinc-500">
+                            {formatDate(result.modified_time)}
+                          </span>
                           <button
                             onClick={() => openLocation(result.path)}
                             className="ml-auto text-orange-800 hover:text-orange-600 font-bold transition-colors underline-offset-4 hover:underline"
