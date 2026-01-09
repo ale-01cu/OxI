@@ -11,6 +11,26 @@ pub struct Database {
 impl Database {
     pub fn new(db_path: PathBuf) -> Result<Self> {
         let conn = Connection::open(&db_path)?;
+        
+        // --- OPTIMIZACIONES DE VELOCIDAD EXTREMA ---
+
+        // 1. Desactiva la espera de escritura en disco (synchronous).
+        // SQLite no esperará a que el disco físico confirme que guardó el dato.
+        // Riesgo: Si se va la luz AHORA MISMO, el índice se corrompe (no importa, se reindexa luego).
+        // Beneficio: Escritura casi a la velocidad de la RAM.
+        conn.pragma_update(None, "synchronous", &0)?;
+
+        // 2. Usa Write-Ahead Logging. Permite leer y escribir al mismo tiempo.
+        conn.pragma_update(None, "journal_mode", &"WAL")?;
+
+        // 3. Aumenta la memoria caché que usa SQLite (aprox 50MB).
+        conn.pragma_update(None, "cache_size", &-50000)?;
+
+        // 4. Guarda archivos temporales en RAM, no en disco.
+        conn.pragma_update(None, "temp_store", &2)?;
+
+        // -------------------------------------------
+
         let db = Self { conn };
         db.init_schema()?;
         Ok(db)

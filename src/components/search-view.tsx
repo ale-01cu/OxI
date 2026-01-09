@@ -337,7 +337,7 @@ function App() {
             </div>
           </div>
 
-          {isSearching && (
+         {/*  {isSearching && (
             <div className="text-center py-20">
               <div className="relative inline-block">
                 <div className="w-12 h-12 border-2 border-orange-900/20 border-t-orange-800 rounded-full animate-spin"></div>
@@ -346,7 +346,7 @@ function App() {
                 Buscando coincidencias...
               </p>
             </div>
-          )}
+          )} */}
 
           {!isSearching && results.length > 0 && (
             <div className="bg-zinc-900/30 rounded-xl shadow-2xl border border-zinc-800/50 overflow-hidden backdrop-blur-sm">
