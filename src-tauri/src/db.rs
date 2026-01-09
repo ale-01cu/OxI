@@ -2,6 +2,8 @@ use rusqlite::{Connection, Result};
 use std::path::PathBuf;
 use tracing::info;
 
+use crate::types::FileRecord;
+
 pub struct Database {
     conn: Connection,
 }
@@ -75,6 +77,37 @@ impl Database {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             rusqlite::params![path, name, extension, file_size, is_dir as i64, modified_time, last_indexed],
         )?;
+        Ok(())
+    }
+
+    /// Inserta/actualiza muchos registros en **una sola** transacción (mucho más rápido).
+    pub fn upsert_batch(&mut self, files: &[FileRecord]) -> Result<()> {
+        if files.is_empty() {
+            return Ok(());
+        }
+
+        let tx = self.conn.transaction()?;
+
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO search_index (path, name, extension, file_size, is_dir, modified_time, last_indexed)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            )?;
+
+            for file in files {
+                stmt.execute(rusqlite::params![
+                    file.path.as_str(),
+                    file.name.as_str(),
+                    file.extension.as_deref(),
+                    file.file_size,
+                    file.is_dir as i64,
+                    file.modified_time.as_str(),
+                    file.last_indexed.as_str()
+                ])?;
+            }
+        }
+
+        tx.commit()?;
         Ok(())
     }
 
@@ -189,4 +222,5 @@ impl Database {
     pub fn get_connection(&self) -> &Connection {
         &self.conn
     }
+    
 }

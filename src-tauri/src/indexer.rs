@@ -1,5 +1,5 @@
 use crate::db::Database;
-use crate::types::{IndexingProgress};
+use crate::types::{FileRecord, IndexingProgress};
 use chrono::{DateTime, Utc};
 use ignore::WalkBuilder;
 use std::path::{Path};
@@ -44,7 +44,56 @@ impl Indexer {
         }
 
         let walker = walk.build();
-        let mut count = 0;
+
+        const BATCH_SIZE: usize = 5_000;
+        let mut batch_buffer: Vec<FileRecord> = Vec::with_capacity(BATCH_SIZE);
+
+        // "Procesados" (para progreso) vs "persistidos" (para retorno).
+        let mut processed = 0usize;
+        let mut persisted = 0usize;
+
+        let flush_batch = |batch: &mut Vec<FileRecord>| -> Result<usize, Box<dyn std::error::Error>> {
+            if batch.is_empty() {
+                return Ok(0);
+            }
+
+            let mut db_guard = self
+                .db
+                .lock()
+                .map_err(|e| format!("Failed to lock database: {}", e))?;
+
+            let batch_len = batch.len();
+
+            match db_guard.upsert_batch(batch.as_slice()) {
+                Ok(()) => {
+                    batch.clear();
+                    Ok(batch_len)
+                }
+                Err(e) => {
+                    warn!("Batch upsert falló ({} items): {}. Haciendo fallback item-por-item.", batch_len, e);
+
+                    let mut ok_count = 0usize;
+                    for r in batch.iter() {
+                        if let Err(item_err) = db_guard.upsert_file(
+                            r.path.as_str(),
+                            r.name.as_str(),
+                            r.extension.as_deref(),
+                            r.file_size,
+                            r.is_dir,
+                            r.modified_time.as_str(),
+                            r.last_indexed.as_str(),
+                        ) {
+                            warn!("Failed to upsert {}: {}", r.path, item_err);
+                        } else {
+                            ok_count += 1;
+                        }
+                    }
+
+                    batch.clear();
+                    Ok(ok_count)
+                }
+            }
+        };
 
         for result in walker {
             if let Ok(entry) = result {
@@ -55,26 +104,26 @@ impl Indexer {
                             let modified_time_str = modified_time.to_rfc3339();
                             let last_indexed_str = Utc::now().to_rfc3339();
 
-                            let db_guard = self.db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
-                            if let Err(e) = db_guard.upsert_file(
-                                path_str,
-                                name,
-                                None,
-                                None,
-                                true,
-                                &modified_time_str,
-                                &last_indexed_str,
-                            ) {
-                                warn!("Failed to upsert directory {}: {}", path_str, e);
-                            } else {
-                                count += 1;
+                            batch_buffer.push(FileRecord {
+                                path: path_str.to_string(),
+                                name: name.to_string(),
+                                extension: None,
+                                file_size: None,
+                                is_dir: true,
+                                modified_time: modified_time_str,
+                                last_indexed: last_indexed_str,
+                            });
 
-                                progress_callback(IndexingProgress {
-                                    current_path: path_str.to_string(),
-                                    files_processed: count,
-                                    total_files: None,
-                                    status: "indexing".to_string(),
-                                });
+                            processed += 1;
+                            progress_callback(IndexingProgress {
+                                current_path: path_str.to_string(),
+                                files_processed: processed,
+                                total_files: None,
+                                status: "indexing".to_string(),
+                            });
+
+                            if batch_buffer.len() >= BATCH_SIZE {
+                                persisted += flush_batch(&mut batch_buffer)?;
                             }
                         }
                     }
@@ -98,26 +147,26 @@ impl Indexer {
                                 let modified_time_str = modified_time.to_rfc3339();
                                 let last_indexed_str = Utc::now().to_rfc3339();
 
-                                let db_guard = self.db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
-                                if let Err(e) = db_guard.upsert_file(
-                                    path_str,
-                                    name,
-                                    extension.as_deref(),
+                                batch_buffer.push(FileRecord {
+                                    path: path_str.to_string(),
+                                    name: name.to_string(),
+                                    extension,
                                     file_size,
-                                    false,
-                                    &modified_time_str,
-                                    &last_indexed_str,
-                                ) {
-                                    warn!("Failed to upsert file {}: {}", path_str, e);
-                                } else {
-                                    count += 1;
+                                    is_dir: false,
+                                    modified_time: modified_time_str,
+                                    last_indexed: last_indexed_str,
+                                });
 
-                                    progress_callback(IndexingProgress {
-                                        current_path: path_str.to_string(),
-                                        files_processed: count,
-                                        total_files: None,
-                                        status: "indexing".to_string(),
-                                    });
+                                processed += 1;
+                                progress_callback(IndexingProgress {
+                                    current_path: path_str.to_string(),
+                                    files_processed: processed,
+                                    total_files: None,
+                                    status: "indexing".to_string(),
+                                });
+
+                                if batch_buffer.len() >= BATCH_SIZE {
+                                    persisted += flush_batch(&mut batch_buffer)?;
                                 }
                             }
                         }
@@ -126,10 +175,18 @@ impl Indexer {
             }
         }
 
-        let elapsed = start.elapsed();
-        info!("Indexing completed: {} items in {:?}", count, elapsed);
+        // Guardar el remanente final.
+        persisted += flush_batch(&mut batch_buffer)?;
 
-        Ok(count)
+        let elapsed = start.elapsed();
+        info!(
+            "Indexing completed: processed={} persisted={} in {:?}",
+            processed,
+            persisted,
+            elapsed
+        );
+
+        Ok(persisted)
     }
 
     pub async fn index_multiple_paths(

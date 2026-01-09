@@ -61,6 +61,18 @@ pub struct IndexingProgress {
     pub status: String,
 }
 
+// Registro interno para escritura en lote a SQLite (no expuesto a la UI).
+#[derive(Debug, Clone)]
+pub struct FileRecord {
+    pub path: String,
+    pub name: String,
+    pub extension: Option<String>,
+    pub file_size: Option<i64>,
+    pub is_dir: bool,
+    pub modified_time: String,
+    pub last_indexed: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexingStatus {
     pub is_indexing: bool,
