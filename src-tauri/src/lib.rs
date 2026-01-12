@@ -173,7 +173,7 @@ async fn update_config(config: SearchConfig) -> Result<(), String> {
 #[tauri::command]
 async fn minimize_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app_handle.get_webview_window("main") {
-        window.minimize().map_err(|e| e.to_string())?;
+        window.hide().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -249,6 +249,35 @@ async fn open_location(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn open_item(path: String, _is_dir: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
@@ -303,11 +332,16 @@ pub fn run() {
                     } => {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            if window.is_visible().unwrap_or(false) {
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            let is_focused = window.is_focused().unwrap_or(false);
+
+                            if is_visible && is_focused {
                                 let _ = window.hide();
                             } else {
+                                let _ = window.unminimize();
                                 let _ = window.show();
                                 let _ = window.set_focus();
+                                let _ = window.emit("focus-search-input", ());
                             }
                         }
                     }
@@ -317,6 +351,36 @@ pub fn run() {
 
             let db_for_setup = Arc::clone(&db);
             let app_handle = app.handle().clone();
+
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
+
+                app.handle().plugin(
+                    tauri_plugin_global_shortcut::Builder::new()
+                        .with_shortcuts(["ctrl+p"])?
+                        .with_handler(move |app, shortcut, event| {
+                            if event.state == ShortcutState::Pressed {
+                                if shortcut.matches(Modifiers::CONTROL, Code::KeyP) {
+                                    if let Some(window) = app.get_webview_window("main") {
+                                        let is_visible = window.is_visible().unwrap_or(false);
+                                        let is_focused = window.is_focused().unwrap_or(false);
+
+                                        if is_visible && is_focused {
+                                            let _ = window.hide();
+                                        } else {
+                                            let _ = window.unminimize();
+                                            let _ = window.show();
+                                            let _ = window.set_focus();
+                                            let _ = window.emit("focus-search-input", ());
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .build(),
+                )?;
+            }
 
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().unwrap();
@@ -376,6 +440,7 @@ pub fn run() {
             get_config,
             update_config,
             open_location,
+            open_item,
             minimize_window,
             toggle_maximize_window,
             close_window,

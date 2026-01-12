@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -14,6 +14,7 @@ import {
 import { SearchResult, SearchResults, IndexingProgress } from "../types";
 
 function App() {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -28,6 +29,10 @@ function App() {
 
   useEffect(() => {
     loadIndexingStatus();
+
+    const unlistenFocus = listen("focus-search-input", () => {
+      inputRef.current?.focus();
+    });
 
     const unlistenProgress = listen<IndexingProgress>(
       "indexing-progress",
@@ -55,6 +60,7 @@ function App() {
     return () => {
       unlistenProgress.then((f) => f());
       unlistenCompleted.then((f) => f());
+      unlistenFocus.then((f) => f());
     };
   }, []);
 
@@ -333,6 +339,7 @@ function App() {
             <div className="relative group">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-600 group-focus-within:text-orange-800 transition-colors" />
               <input
+                ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => {
