@@ -8,7 +8,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use dirs;
-use tauri::{Emitter, Manager};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    Emitter, Manager, WindowEvent,
+};
 use tracing::{error, info};
 use tracing_subscriber;
 use types::{IndexingStatus, SearchConfig, SearchFilters, SearchResults};
@@ -272,6 +276,45 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .setup(move |app| {
+            let quit_i = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Mostrar OxI Search", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| match event {
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        ..
+                    } => {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            if window.is_visible().unwrap_or(false) {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                    _ => {}
+                })
+                .build(app)?;
+
             let db_for_setup = Arc::clone(&db);
             let app_handle = app.handle().clone();
 
@@ -317,6 +360,13 @@ pub fn run() {
             });
 
             Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
+                window.hide().unwrap();
+                api.prevent_close();
+            }
+            _ => {}
         })
         .manage(db_for_tauri)
         .invoke_handler(tauri::generate_handler![
