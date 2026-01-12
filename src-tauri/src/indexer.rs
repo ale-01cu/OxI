@@ -1,4 +1,5 @@
 use crate::db::Database;
+use crate::mft_indexer::MftIndexer;
 use crate::types::{FileRecord, IndexingProgress};
 use chrono::{DateTime, Utc};
 use ignore::WalkBuilder;
@@ -17,6 +18,36 @@ impl Indexer {
         Self { db }
     }
 
+    fn is_windows_drive(path: &str) -> bool {
+        #[cfg(windows)]
+        {
+            let path_upper = path.to_uppercase();
+            path_upper.len() == 3 && path_upper.chars().nth(1) == Some(':')
+                && path_upper.chars().nth(2) == Some('\\')
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    }
+
+    fn can_use_mft(path: &str) -> bool {
+        if !Self::is_windows_drive(path) {
+            return false;
+        }
+
+        #[cfg(windows)]
+        {
+            let drive = path.chars().next().unwrap();
+            let drive_path = format!(r"\\.\{}:", drive);
+            std::fs::File::open(&drive_path).is_ok()
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    }
+
     pub async fn index_path(
         &self,
         path: &str,
@@ -24,6 +55,26 @@ impl Indexer {
         progress_callback: Arc<dyn Fn(IndexingProgress) + Send + Sync>,
     ) -> Result<usize, Box<dyn std::error::Error>> {
         info!("Starting indexing of path: {}", path);
+
+        if Self::is_windows_drive(path) && Self::can_use_mft(path) {
+            info!("Attempting MFT indexing for drive: {}", path);
+            let drive = path.chars().next().unwrap();
+            let mft_indexer = MftIndexer::new(Arc::clone(&self.db));
+            match mft_indexer
+                .index_drive(&drive.to_string(), progress_callback.clone())
+                .await
+            {
+                Ok(count) => {
+                    info!("MFT indexing successful: {} files", count);
+                    return Ok(count);
+                }
+                Err(e) => {
+                    warn!("MFT indexing failed: {}. Falling back to filesystem walk.", e);
+                }
+            }
+        }
+
+        info!("Using filesystem walk for path: {}", path);
         let start = Instant::now();
 
         let path_obj = Path::new(path);

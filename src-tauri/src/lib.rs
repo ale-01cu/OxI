@@ -1,5 +1,6 @@
 mod db;
 mod indexer;
+mod mft_indexer;
 mod types;
 
 use db::Database;

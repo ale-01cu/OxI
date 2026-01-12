@@ -4,7 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Search,
   HardDrive,
-  Settings,
   FileText,
   Minus,
   Square,
@@ -223,7 +222,7 @@ function App() {
       <nav
         data-tauri-drag-region
         onDoubleClick={handleDoubleClickTitleBar}
-        className="border-b border-zinc-900/70 bg-zinc-900/50 backdrop-blur-sm flex-shrink-0 select-none"
+        className="border-b border-zinc-900/70 bg-zinc-900/50 backdrop-blur-sm shrink-0 select-none"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
@@ -263,7 +262,7 @@ function App() {
                 {isIndexing ? "Indexando..." : "Reindexar"}
               </button>
 
-              <button
+              {/* <button
                 onClick={(e) => {
                   e.stopPropagation();
                 }}
@@ -271,7 +270,7 @@ function App() {
                 className="p-2 text-zinc-500 hover:bg-zinc-800 rounded-md transition-colors"
               >
                 <Settings className="w-5 h-5" />
-              </button>
+              </button> */}
 
               <div className="flex items-center gap-1 border-l border-zinc-800 ml-2 pl-3">
                 <button
@@ -311,7 +310,7 @@ function App() {
       </nav>
 
       {isIndexing && indexingProgress && (
-        <div className="border-b border-orange-900/30 bg-orange-950/10 flex-shrink-0">
+        <div className="border-b border-orange-900/30 bg-orange-950/10 shrink-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
             <div className="flex items-center gap-3">
               <div className="animate-spin">

@@ -2551,6 +2551,7 @@ name = "oxi-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "chrono",
  "dirs 5.0.1",
  "ignore",

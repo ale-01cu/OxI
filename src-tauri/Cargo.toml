@@ -30,3 +30,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 dirs = "5.0"
+byteorder = "1.5"
