@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{info, warn};
 
-const SECTOR_SIZE: usize = 512;
 const MFT_RECORD_SIZE: usize = 1024;
 const ATTR_FILENAME: u32 = 0x30;
 const END_OF_ATTRIBUTES: u32 = 0xFFFFFFFF;

@@ -236,7 +236,7 @@ function App() {
               </div>
               <div className="flex flex-col justify-center pointer-events-none">
                 <span className="text-xl font-bold text-zinc-100 tracking-tight leading-none">
-                  OxI <span className="text-orange-800">Search</span>
+                  OxI
                 </span>
                 <span className="text-[10px] text-zinc-600 font-medium uppercase tracking-[0.2em] mt-1">
                   Engine v1.0

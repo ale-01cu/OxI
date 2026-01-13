@@ -1,0 +1,12 @@
+# Forzar a que todos los archivos de texto usen LF (Linux/Mac style)
+* text=auto eol=lf
+
+# Mantener archivos batch de Windows con CRLF
+*.{cmd,[cC][mM][dD]} text eol=crlf
+*.{bat,[bB][aA][tT]} text eol=crlf
+
+# Archivos binarios (imágenes, iconos, etc) no deben tocarse
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
